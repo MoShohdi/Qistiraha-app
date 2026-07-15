@@ -169,6 +169,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     int remainingMonths = widget.installment.totalMonths - widget.installment.paidMonths;
     double remainingDebt = remainingMonths * widget.installment.monthlyPayment;

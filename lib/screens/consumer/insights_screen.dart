@@ -361,9 +361,13 @@ class InsightsScreen extends StatelessWidget {
                                   Map<String, double> sums = {};
                                   for (var item in rod.rodStackItems) {
                                     String status = 'Payment';
-                                    if (item.color == Colors.red) status = 'Overdue/Default';
-                                    else if (item.color == const Color(0xFF2E65F3)) status = 'Current Due';
-                                    else status = 'Scheduled';
+                                    if (item.color == Colors.red) {
+                                      status = 'Overdue/Default';
+                                    } else if (item.color == const Color(0xFF2E65F3)) {
+                                      status = 'Current Due';
+                                    } else {
+                                      status = 'Scheduled';
+                                    }
                                     
                                     sums[status] = (sums[status] ?? 0) + (item.toY - item.fromY);
                                   }
