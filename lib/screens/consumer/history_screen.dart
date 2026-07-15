@@ -4,10 +4,18 @@ import 'package:intl/intl.dart';
 import '../../services/hive_service.dart';
 import '../../models/user_account.dart';
 import '../../models/installment.dart';
+import '../../models/enums.dart';
 import 'installment_details_screen.dart';
 
-class HistoryScreen extends StatelessWidget {
+class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
+
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  String _sortBy = 'urgency'; // default
 
   @override
   Widget build(BuildContext context) {
@@ -17,18 +25,43 @@ class HistoryScreen extends StatelessWidget {
         backgroundColor: const Color(0xFFF8F9FA),
         elevation: 0,
         title: const Text('History', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: DropdownButton<String>(
+              value: _sortBy,
+              underline: const SizedBox(),
+              icon: const Icon(Icons.sort, color: Colors.black, size: 20),
+              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 14),
+              items: const [
+                DropdownMenuItem(value: 'name', child: Text('Name')),
+                DropdownMenuItem(value: 'total debt', child: Text('Total Debt')),
+                DropdownMenuItem(value: 'installment debt', child: Text('Installment Debt')),
+                DropdownMenuItem(value: 'installment duration', child: Text('Duration')),
+                DropdownMenuItem(value: 'urgency', child: Text('Urgency')),
+              ],
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    _sortBy = val;
+                  });
+                }
+              },
+            ),
+          ),
+        ],
       ),
       body: ValueListenableBuilder(
         valueListenable: HiveService.getUserBox().listenable(),
         builder: (context, Box<UserAccount> box, _) {
           if (box.isEmpty) return const Center(child: CircularProgressIndicator());
           UserAccount user = box.values.first;
-
+ 
           return ValueListenableBuilder(
             valueListenable: HiveService.getInstallmentBox().listenable(),
             builder: (context, Box<Installment> installmentBox, _) {
-              var paidInstallments = user.installments?.where((inst) => inst.status == 'Paid').toList() ?? [];
-
+              var paidInstallments = user.installments?.where((inst) => inst.statusEnum == InstallmentStatus.paid).toList() ?? [];
+ 
               if (paidInstallments.isEmpty) {
                 return Center(
                   child: Column(
@@ -50,8 +83,25 @@ class HistoryScreen extends StatelessWidget {
                 );
               }
 
+              // Sort the paid installments
+              paidInstallments.sort((a, b) {
+                switch (_sortBy) {
+                  case 'name':
+                    return a.merchantName.toLowerCase().compareTo(b.merchantName.toLowerCase());
+                  case 'total debt':
+                    return b.amount.compareTo(a.amount); // descending original debt
+                  case 'installment debt':
+                    return b.monthlyPayment.compareTo(a.monthlyPayment); // descending
+                  case 'installment duration':
+                    return b.totalMonths.compareTo(a.totalMonths); // descending
+                  case 'urgency':
+                  default:
+                    return b.dueDate.compareTo(a.dueDate); // descending (latest paid/due first)
+                }
+              });
+ 
               final currencyFormatter = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
-
+ 
               return ListView.builder(
                 padding: const EdgeInsets.all(20),
                 itemCount: paidInstallments.length,

@@ -6,6 +6,7 @@ import '../../models/installment.dart';
 import '../../services/hive_service.dart';
 import '../../services/time_service.dart';
 import '../../engine/penalty_engine.dart';
+import '../../models/enums.dart';
 import 'package:lottie/lottie.dart';
 
 class InstallmentDetailsScreen extends StatefulWidget {
@@ -215,7 +216,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             const SizedBox(height: 24),
             _buildPaymentHistory(),
             const SizedBox(height: 24),
-            if (widget.installment.status != 'Paid') ...[
+            if (widget.installment.statusEnum != InstallmentStatus.paid) ...[
               _buildEarlyPayoffCalculator(),
               const SizedBox(height: 24),
             ],
@@ -523,67 +524,168 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               ),
             ],
           ),
-          if (widget.installment.status != 'Paid') ...[
+          if (widget.installment.statusEnum != InstallmentStatus.paid) ...[
             const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () async {
-                  if (widget.installment.paidMonths < widget.installment.totalMonths) {
-                    int missed = PenaltyEngine.calculateMissedMonths(widget.installment);
-                    int monthsToPay = isAccelerated
-                        ? (widget.installment.totalMonths - widget.installment.paidMonths)
-                        : (missed <= 0 ? 1 : missed);
-                    
-                    if (widget.installment.paidMonths + monthsToPay > widget.installment.totalMonths) {
-                      monthsToPay = widget.installment.totalMonths - widget.installment.paidMonths;
-                    }
-                    
-                    double evenlyDistributedPenalty = lateFee / monthsToPay;
-                    for (int i = 0; i < monthsToPay; i++) {
-                      widget.installment.pastPayments = List.from(widget.installment.pastPayments)..add(widget.installment.monthlyPayment + evenlyDistributedPenalty);
-                    }
-                    
-                    widget.installment.paidMonths += monthsToPay;
-                    widget.installment.dueDate = DateTime(widget.installment.dueDate.year, widget.installment.dueDate.month + monthsToPay, widget.installment.dueDate.day);
-                    
-                    if (widget.installment.paidMonths >= widget.installment.totalMonths) {
-                      widget.installment.status = 'Paid';
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Installment fully paid! Moved to History tab. 🎉'),
-                            backgroundColor: Colors.green,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                        Navigator.pop(context); // Go back to home to see the animation/result
-                      }
-                    } else if (widget.installment.status == 'Overdue' && widget.installment.dueDate.isAfter(TimeService.now())) {
-                      widget.installment.status = 'Active';
-                    }
-                    await widget.installment.save();
-                    setState(() {});
+            (() {
+              int regularMonthsToPay = PenaltyEngine.calculateActualMonthsToPay(widget.installment);
+              if (widget.installment.paidMonths + regularMonthsToPay > widget.installment.totalMonths) {
+                regularMonthsToPay = widget.installment.totalMonths - widget.installment.paidMonths;
+              }
+              double regularTransactionCost = (widget.installment.monthlyPayment * regularMonthsToPay) + lateFee;
+
+              int fullMonthsToPay = widget.installment.totalMonths - widget.installment.paidMonths;
+              double fullTransactionCost = (widget.installment.monthlyPayment * fullMonthsToPay) + lateFee;
+
+              Future<void> pay(int monthsToPay) async {
+                if (widget.installment.paidMonths < widget.installment.totalMonths) {
+                  double evenlyDistributedPenalty = lateFee / monthsToPay;
+                  for (int i = 0; i < monthsToPay; i++) {
+                    widget.installment.pastPayments = List.from(widget.installment.pastPayments)..add(widget.installment.monthlyPayment + evenlyDistributedPenalty);
                   }
-                },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: isAccelerated ? Colors.red : Colors.black,
-                  side: BorderSide(color: isAccelerated ? Colors.red : Colors.grey[300]!),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  
+                  widget.installment.paidMonths += monthsToPay;
+                  widget.installment.dueDate = DateTime(widget.installment.dueDate.year, widget.installment.dueDate.month + monthsToPay, widget.installment.dueDate.day);
+                  
+                  if (widget.installment.paidMonths >= widget.installment.totalMonths) {
+                    widget.installment.statusEnum = InstallmentStatus.paid;
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Installment fully paid! Moved to History tab. 🎉'),
+                          backgroundColor: Colors.green,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      Navigator.pop(context); // Go back to home to see the animation/result
+                    }
+                  } else if (widget.installment.statusEnum == InstallmentStatus.overdue && widget.installment.dueDate.isAfter(TimeService.now())) {
+                    widget.installment.statusEnum = InstallmentStatus.active;
+                  }
+                  await widget.installment.save();
+                  setState(() {});
+                }
+              }
+
+              if (isAccelerated) {
+                return Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => pay(regularMonthsToPay),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.black,
+                          side: BorderSide(color: Colors.grey[300]!),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: regularMonthsToPay > 1
+                                    ? 'Pay $regularMonthsToPay Months Arrears\n'
+                                    : 'Mark Month as Paid\n',
+                              ),
+                              TextSpan(
+                                text: '(${currencyFormatter.format(regularTransactionCost)})',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.normal,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => pay(fullMonthsToPay),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                            children: [
+                              const TextSpan(text: 'Settle Full Debt\n'),
+                              TextSpan(
+                                text: '(${currencyFormatter.format(fullTransactionCost)})',
+                                style: TextStyle(
+                                  color: Colors.red.shade100,
+                                  fontWeight: FontWeight.normal,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              } else {
+                return SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => pay(regularMonthsToPay),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black,
+                      side: BorderSide(color: Colors.grey[300]!),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: regularMonthsToPay > 1
+                                ? 'Pay $regularMonthsToPay Months Arrears\n'
+                                : 'Mark Month as Paid\n',
+                          ),
+                          TextSpan(
+                            text: '(${currencyFormatter.format(regularTransactionCost)})',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.normal,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: Text(
-                  isAccelerated 
-                    ? 'Settle Full Debt'
-                    : PenaltyEngine.calculateMissedMonths(widget.installment) > 1 
-                      ? 'Pay ${PenaltyEngine.calculateMissedMonths(widget.installment)} Months Arrears' 
-                      : 'Mark Month as Paid', 
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isAccelerated ? Colors.red : Colors.black)
-                ),
-              ),
-            ),
+                );
+              }
+            })(),
           ],
         ],
       ),

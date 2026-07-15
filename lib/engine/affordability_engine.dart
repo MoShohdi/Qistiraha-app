@@ -1,4 +1,5 @@
 import '../models/user_account.dart';
+import '../models/enums.dart';
 import '../services/time_service.dart';
 import 'penalty_engine.dart';
 
@@ -32,7 +33,7 @@ class AffordabilityEngine {
     
     double total = 0.0;
     for (var inst in user.installments!) {
-      if (inst.status != 'Paid') {
+      if (inst.statusEnum != InstallmentStatus.paid) {
         PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
         DateTime dueDateJustDate = DateTime(inst.dueDate.year, inst.dueDate.month, inst.dueDate.day);
         int daysLate = justDate.difference(dueDateJustDate).inDays;
@@ -58,7 +59,7 @@ class AffordabilityEngine {
 
     double total = 0.0;
     for (var inst in user.installments!) {
-      if (inst.status != 'Paid') {
+      if (inst.statusEnum != InstallmentStatus.paid) {
         int remainingMonths = inst.totalMonths - inst.paidMonths;
         total += remainingMonths * inst.monthlyPayment;
         total += PenaltyEngine.calculateLateFees(inst).lateFee;

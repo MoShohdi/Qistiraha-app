@@ -6,6 +6,7 @@ import '../../models/user_account.dart';
 import '../../models/installment.dart';
 import '../../services/time_service.dart';
 import '../../engine/penalty_engine.dart';
+import '../../models/enums.dart';
 import '../../engine/affordability_engine.dart';
 import 'add_installment_screen.dart';
 import 'installment_details_screen.dart';
@@ -18,6 +19,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  String _sortBy = 'urgency';
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Builder(
                   builder: (context) {
                     List<Installment> activeInstallments = (user.installments?.toList() ?? <Installment>[])
-                        .where((inst) => inst.paidMonths < inst.totalMonths && inst.status != 'Paid')
+                        .where((inst) => inst.paidMonths < inst.totalMonths && inst.statusEnum != InstallmentStatus.paid)
                         .toList();
                         
                     int activeCount = activeInstallments.length;
@@ -181,20 +184,45 @@ class _HomeScreenState extends State<HomeScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        shape: BoxShape.circle,
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.add, size: 20),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const AddInstallmentScreen()),
-                          );
-                        },
-                      ),
+                    Row(
+                      children: [
+                        DropdownButton<String>(
+                          value: _sortBy,
+                          underline: const SizedBox(),
+                          icon: const Icon(Icons.sort, color: Colors.black, size: 20),
+                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 14),
+                          items: const [
+                            DropdownMenuItem(value: 'name', child: Text('Name')),
+                            DropdownMenuItem(value: 'total debt', child: Text('Total Debt')),
+                            DropdownMenuItem(value: 'installment debt', child: Text('Installment Debt')),
+                            DropdownMenuItem(value: 'installment duration', child: Text('Duration')),
+                            DropdownMenuItem(value: 'urgency', child: Text('Urgency')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                _sortBy = val;
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.add, size: 20),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const AddInstallmentScreen()),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -351,21 +379,47 @@ class _HomeScreenState extends State<HomeScreen> {
       return const Text("No active installments");
     }
 
+    // Filter active installments
+    final activeList = installments.where((inst) => inst.statusEnum != InstallmentStatus.paid).toList();
+
+    if (activeList.isEmpty) {
+      return const Text("No active installments");
+    }
+
+    // Sort based on selection
+    activeList.sort((a, b) {
+      switch (_sortBy) {
+        case 'name':
+          return a.merchantName.toLowerCase().compareTo(b.merchantName.toLowerCase());
+        case 'total debt':
+          double debtA = ((a.totalMonths - a.paidMonths) * a.monthlyPayment) + PenaltyEngine.calculateLateFees(a).lateFee;
+          double debtB = ((b.totalMonths - b.paidMonths) * b.monthlyPayment) + PenaltyEngine.calculateLateFees(b).lateFee;
+          return debtB.compareTo(debtA);
+        case 'installment debt':
+          return b.monthlyPayment.compareTo(a.monthlyPayment);
+        case 'installment duration':
+          return b.totalMonths.compareTo(a.totalMonths);
+        case 'urgency':
+        default:
+          return a.dueDate.compareTo(b.dueDate);
+      }
+    });
+
     final currencyFormatter = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
 
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: installments.length,
+      itemCount: activeList.length,
       itemBuilder: (context, index) {
-        var inst = installments[index];
+        var inst = activeList[index];
         
         DateTime now = TimeService.now();
         DateTime justDate = DateTime(now.year, now.month, now.day);
         DateTime dueDateJustDate = DateTime(inst.dueDate.year, inst.dueDate.month, inst.dueDate.day);
         int daysToDue = dueDateJustDate.difference(justDate).inDays;
 
-        bool isOverdue = inst.status != 'Paid' && daysToDue < 0;
+        bool isOverdue = inst.statusEnum != InstallmentStatus.paid && daysToDue < 0;
         PenaltyResult penaltyResult = PenaltyEngine.calculateLateFees(inst);
         double lateFee = penaltyResult.lateFee;
         bool isAccelerated = penaltyResult.isAccelerated;
@@ -391,14 +445,14 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         // --- Button: immediate transaction cost (1 month for informal, arrears for commercial) ---
-        int actualMonthsToPay = isAccelerated
-            ? (inst.totalMonths - inst.paidMonths)
-            : PenaltyEngine.calculateActualMonthsToPay(inst);
-        // Safety cap
-        if (inst.paidMonths + actualMonthsToPay > inst.totalMonths) {
-          actualMonthsToPay = inst.totalMonths - inst.paidMonths;
+        int regularMonthsToPay = PenaltyEngine.calculateActualMonthsToPay(inst);
+        if (inst.paidMonths + regularMonthsToPay > inst.totalMonths) {
+          regularMonthsToPay = inst.totalMonths - inst.paidMonths;
         }
-        double transactionCost = (inst.monthlyPayment * actualMonthsToPay) + lateFee;
+        double regularTransactionCost = (inst.monthlyPayment * regularMonthsToPay) + lateFee;
+
+        int fullMonthsToPay = inst.totalMonths - inst.paidMonths;
+        double fullTransactionCost = (inst.monthlyPayment * fullMonthsToPay) + lateFee;
 
         // For visual progress bar: strictly missed calendar months (no grace bundling)
         int missedMonths = 0;
@@ -429,9 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return AnimatedSize(
           duration: const Duration(milliseconds: 500),
           curve: Curves.easeInOutQuart,
-          child: inst.status == 'Paid' 
-            ? const SizedBox(width: double.infinity, height: 0)
-            : GestureDetector(
+          child: GestureDetector(
           onTap: () {
             Navigator.push(
               context,
@@ -478,7 +530,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            if (inst.lender != 'Other')
+                            if (inst.lenderEnum != LenderType.standard)
                               Container(
                                 margin: const EdgeInsets.only(left: 8),
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -626,99 +678,158 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }),
               ),
-              if (inst.status != 'Paid') ...[
+              if (inst.statusEnum != InstallmentStatus.paid) ...[
                 const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () async {
-                       if (inst.paidMonths < inst.totalMonths) {
-                         int monthsToPay = actualMonthsToPay;
+                (() {
+                  Future<void> pay(int monthsToPay) async {
+                    if (inst.paidMonths < inst.totalMonths) {
+                      double evenlyDistributedPenalty = lateFee / monthsToPay;
 
-                         // Distribute the base + penalty across pastPayments
-                         double evenlyDistributedPenalty = lateFee / monthsToPay;
-
-                         for (int i = 0; i < monthsToPay; i++) {
-                           inst.pastPayments = List.from(inst.pastPayments)..add(inst.monthlyPayment + evenlyDistributedPenalty);
-                         }
-                        
-                        inst.paidMonths += monthsToPay;
-                        inst.dueDate = DateTime(inst.dueDate.year, inst.dueDate.month + monthsToPay, inst.dueDate.day);
-                        
-                        if (inst.paidMonths >= inst.totalMonths) {
-                          inst.status = 'Paid';
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Installment fully paid! Moved to History tab. 🎉'),
-                                backgroundColor: Colors.green,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        } else if (inst.status == 'Overdue' && inst.dueDate.isAfter(TimeService.now())) {
-                          inst.status = 'Active';
-                        }
-                        await inst.save();
+                      for (int i = 0; i < monthsToPay; i++) {
+                        inst.pastPayments = List.from(inst.pastPayments)..add(inst.monthlyPayment + evenlyDistributedPenalty);
                       }
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: isAccelerated ? Colors.red : Colors.black,
-                      side: BorderSide(color: isAccelerated ? Colors.red : Colors.grey[300]!),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: isAccelerated
-                      ? RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                      
+                      inst.paidMonths += monthsToPay;
+                      inst.dueDate = DateTime(inst.dueDate.year, inst.dueDate.month + monthsToPay, inst.dueDate.day);
+                      
+                      if (inst.paidMonths >= inst.totalMonths) {
+                        inst.statusEnum = InstallmentStatus.paid;
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Installment fully paid! Moved to History tab. 🎉'),
+                              backgroundColor: Colors.green,
+                              behavior: SnackBarBehavior.floating,
                             ),
-                            children: [
-                              const TextSpan(text: 'Settle Full Debt\n'),
-                              TextSpan(
-                                text: '(${currencyFormatter.format(transactionCost)})',
-                                style: TextStyle(
-                                  color: Colors.red.shade300,
-                                  fontWeight: FontWeight.normal,
-                                  fontSize: 12,
-                                ),
+                          );
+                        }
+                      } else if (inst.statusEnum == InstallmentStatus.overdue && inst.dueDate.isAfter(TimeService.now())) {
+                        inst.statusEnum = InstallmentStatus.active;
+                      }
+                      await inst.save();
+                    }
+                  }
+
+                  if (isAccelerated) {
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => pay(regularMonthsToPay),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.black,
+                              side: BorderSide(color: Colors.grey[300]!),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                            ],
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: regularMonthsToPay > 1
+                                        ? 'Pay $regularMonthsToPay Months Arrears\n'
+                                        : 'Mark Month as Paid\n',
+                                  ),
+                                  TextSpan(
+                                    text: '(${currencyFormatter.format(regularTransactionCost)})',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.normal,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        )
-                      : RichText(
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => pay(fullMonthsToPay),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                children: [
+                                  const TextSpan(text: 'Settle Full Debt\n'),
+                                  TextSpan(
+                                    text: '(${currencyFormatter.format(fullTransactionCost)})',
+                                    style: TextStyle(
+                                      color: Colors.red.shade100,
+                                      fontWeight: FontWeight.normal,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  } else {
+                    return SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => pay(regularMonthsToPay),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.black,
+                          side: BorderSide(color: Colors.grey[300]!),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: RichText(
                           textAlign: TextAlign.center,
                           text: TextSpan(
                             style: const TextStyle(
                               color: Colors.black,
                               fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                              fontSize: 13,
                             ),
                             children: [
                               TextSpan(
-                                text: actualMonthsToPay > 1
-                                    ? 'Pay $actualMonthsToPay Months Arrears\n'
+                                text: regularMonthsToPay > 1
+                                    ? 'Pay $regularMonthsToPay Months Arrears\n'
                                     : 'Mark Month as Paid\n',
                               ),
                               TextSpan(
-                                text: '(${currencyFormatter.format(transactionCost)})',
+                                text: '(${currencyFormatter.format(regularTransactionCost)})',
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
                                   fontWeight: FontWeight.normal,
-                                  fontSize: 12,
+                                  fontSize: 11,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                  ),
-                ),
+                      ),
+                    );
+                  }
+                })(),
               ],
             ],
           ),
