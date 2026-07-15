@@ -6,6 +6,7 @@ import '../../models/installment.dart';
 import '../../services/hive_service.dart';
 import '../../services/time_service.dart';
 import '../../engine/penalty_engine.dart';
+import 'package:lottie/lottie.dart';
 
 class InstallmentDetailsScreen extends StatefulWidget {
   final Installment installment;
@@ -70,9 +71,9 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
       await widget.installment.delete();
       
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Installment deleted')),
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const DeleteAnimationScreen()),
         );
       }
     }
@@ -1002,6 +1003,30 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             const Center(child: Text("By Amount simulation is coming soon."))
           ]
         ],
+      ),
+    );
+  }
+}
+
+class DeleteAnimationScreen extends StatelessWidget {
+  const DeleteAnimationScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Lottie.asset(
+          'assets/animations/delete_files.json',
+          repeat: false,
+          onLoaded: (composition) {
+            Future.delayed(composition.duration, () {
+              if (context.mounted) {
+                Navigator.popUntil(context, (route) => route.isFirst);
+              }
+            });
+          },
+        ),
       ),
     );
   }
