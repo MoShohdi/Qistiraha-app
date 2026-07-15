@@ -7,6 +7,7 @@ import '../../models/user_account.dart';
 import '../../services/time_service.dart';
 import '../../engine/affordability_engine.dart';
 import '../../engine/penalty_engine.dart';
+import '../../models/enums.dart';
 import '../../widgets/income_edit_bottom_sheet.dart';
 
 class InsightsScreen extends StatelessWidget {
@@ -41,7 +42,7 @@ class InsightsScreen extends StatelessWidget {
           Map<String, double> categoryTotals = {};
           double totalDebt = 0;
           for (var inst in installments) {
-            if (inst.status != 'Paid') {
+            if (inst.statusEnum != InstallmentStatus.paid) {
               double remaining = (inst.totalMonths - inst.paidMonths) * inst.monthlyPayment;
               categoryTotals[inst.category] = (categoryTotals[inst.category] ?? 0) + remaining;
               totalDebt += remaining;
@@ -111,7 +112,7 @@ class InsightsScreen extends StatelessWidget {
             List<BarChartRodStackItem> stackItems = [];
             
             for (var inst in installments) {
-              if (inst.status != 'Paid') {
+              if (inst.statusEnum != InstallmentStatus.paid) {
                 PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
                 int remaining = inst.totalMonths - inst.paidMonths;
 

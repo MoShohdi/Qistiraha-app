@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
-import '../../models/installment.dart';
-import '../../services/hive_service.dart';
 import '../../services/time_service.dart';
-import '../../models/user_account.dart';
 import 'lender_selection_screen.dart';
+import 'add_installment_controller.dart';
 
 class AddInstallmentScreen extends StatefulWidget {
   const AddInstallmentScreen({super.key});
@@ -15,6 +12,7 @@ class AddInstallmentScreen extends StatefulWidget {
 }
 
 class _AddInstallmentScreenState extends State<AddInstallmentScreen> {
+  final _controller = const AddInstallmentController();
   final _formKey = GlobalKey<FormState>();
   
   final _storeNameController = TextEditingController();
@@ -43,17 +41,14 @@ class _AddInstallmentScreenState extends State<AddInstallmentScreen> {
     int months = int.tryParse(_installmentsController.text) ?? 0;
     double interest = double.tryParse(_interestRateController.text) ?? 0.0;
 
-    if (months > 0) {
-      double principal = total - down;
-      double totalWithInterest = principal * (1 + (interest / 100));
-      setState(() {
-        _calculatedMonthly = totalWithInterest / months;
-      });
-    } else {
-      setState(() {
-        _calculatedMonthly = 0.0;
-      });
-    }
+    setState(() {
+      _calculatedMonthly = _controller.calculateMonthly(
+        totalAmount: total,
+        downPayment: down,
+        totalMonths: months,
+        interestRatePercent: interest,
+      );
+    });
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -73,60 +68,55 @@ class _AddInstallmentScreenState extends State<AddInstallmentScreen> {
 
   void _saveInstallment() async {
     if (_formKey.currentState!.validate() && _selectedDate != null) {
-      final userBox = HiveService.getUserBox();
-      if (userBox.isEmpty) return;
-
-      UserAccount user = userBox.values.first;
-
-      final newInstallment = Installment(
-        id: const Uuid().v4(),
-        amount: double.parse(_totalAmountController.text),
-        merchantName: _storeNameController.text,
-        itemDescription: _itemDescController.text,
-        dueDate: _selectedDate!,
-        totalMonths: int.parse(_installmentsController.text),
-        paidMonths: 0,
-        status: 'Active',
-        monthlyPayment: _calculatedMonthly,
-        downPayment: double.tryParse(_downPaymentController.text) ?? 0.0,
-        interestRate: double.tryParse(_interestRateController.text) ?? 0.0,
-      );
-
-      final installmentBox = HiveService.getInstallmentBox();
-      await installmentBox.add(newInstallment);
-
-      user.installments?.add(newInstallment);
-      await user.save();
-
-      if (mounted) {
-        bool? addRule = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Add Late Fee Rule?'),
-            content: const Text('Would you like to assign a specific lender to this installment to automatically track real-world late fees and penalties?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('No, skip for now', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
-                child: const Text('Yes, choose lender'),
-              ),
-            ],
-          ),
+      try {
+        final newInstallment = await _controller.saveInstallment(
+          storeName: _storeNameController.text,
+          itemDescription: _itemDescController.text,
+          totalAmount: double.parse(_totalAmountController.text),
+          totalMonths: int.parse(_installmentsController.text),
+          monthlyPayment: _calculatedMonthly,
+          dueDate: _selectedDate!,
+          downPayment: double.tryParse(_downPaymentController.text) ?? 0.0,
+          interestRate: double.tryParse(_interestRateController.text) ?? 0.0,
+          category: 'Other',
         );
 
-        if (addRule == true && mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => LenderSelectionScreen(installment: newInstallment),
+        if (mounted) {
+          bool? addRule = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Add Late Fee Rule?'),
+              content: const Text('Would you like to assign a specific lender to this installment to automatically track real-world late fees and penalties?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('No, skip for now', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+                  child: const Text('Yes, choose lender'),
+                ),
+              ],
             ),
           );
-        } else if (mounted) {
-          Navigator.pop(context);
+
+          if (addRule == true && mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => LenderSelectionScreen(installment: newInstallment),
+              ),
+            );
+          } else if (mounted) {
+            Navigator.pop(context);
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error saving installment: $e'), backgroundColor: Colors.red),
+          );
         }
       }
     }

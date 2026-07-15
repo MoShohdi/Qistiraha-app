@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'enums.dart';
 
 part 'installment.g.dart';
 
@@ -66,4 +67,14 @@ class Installment extends HiveObject {
     this.pastPayments = const [],
     this.warrantyImagePath,
   });
+
+  // ---------------------------------------------------------------------------
+  // Type-safe enum accessors (Hive fields remain raw Strings — no migration needed)
+  // ---------------------------------------------------------------------------
+
+  InstallmentStatus get statusEnum => InstallmentStatus.fromRaw(status);
+  set statusEnum(InstallmentStatus s) => status = s.raw;
+
+  LenderType get lenderEnum => LenderType.fromRaw(lender);
+  set lenderEnum(LenderType l) => lender = l.raw;
 }
