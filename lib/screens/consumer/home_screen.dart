@@ -369,6 +369,51 @@ class _HomeScreenState extends State<HomeScreen> {
         PenaltyResult penaltyResult = PenaltyEngine.calculateLateFees(inst);
         double lateFee = penaltyResult.lateFee;
         bool isAccelerated = penaltyResult.isAccelerated;
+        int remaining = inst.totalMonths - inst.paidMonths;
+        
+        double displayAmountDue;
+
+        // --- Header: total accumulated debt (what the user owes in full) ---
+        int monthsOwed;
+        if (!isOverdue) {
+          monthsOwed = 1; // upcoming or on-time: show current active month
+        } else {
+          // +1 because calculateCalendarMonthsPassed counts COMPLETED months;
+          // the current in-progress late month is also owed.
+          monthsOwed = PenaltyEngine.calculateCalendarMonthsPassed(dueDateJustDate, justDate) + 1;
+          if (monthsOwed > remaining) monthsOwed = remaining; // cap at remaining
+        }
+
+        if (isAccelerated) {
+          displayAmountDue = ((inst.totalMonths - inst.paidMonths) * inst.monthlyPayment) + lateFee;
+        } else {
+          displayAmountDue = (inst.monthlyPayment * monthsOwed) + lateFee;
+        }
+
+        // --- Button: immediate transaction cost (1 month for informal, arrears for commercial) ---
+        int actualMonthsToPay = isAccelerated
+            ? (inst.totalMonths - inst.paidMonths)
+            : PenaltyEngine.calculateActualMonthsToPay(inst);
+        // Safety cap
+        if (inst.paidMonths + actualMonthsToPay > inst.totalMonths) {
+          actualMonthsToPay = inst.totalMonths - inst.paidMonths;
+        }
+        double transactionCost = (inst.monthlyPayment * actualMonthsToPay) + lateFee;
+
+        // For visual progress bar: strictly missed calendar months (no grace bundling)
+        int missedMonths = 0;
+        if (isOverdue) {
+          missedMonths = PenaltyEngine.calculateCalendarMonthsPassed(dueDateJustDate, justDate);
+          if (missedMonths == 0) missedMonths = 1;
+          missedMonths = missedMonths > remaining ? remaining : missedMonths;
+        }
+
+        int visualRedSegments = 0;
+        if (isOverdue) {
+          visualRedSegments = PenaltyEngine.calculateCalendarMonthsPassed(dueDateJustDate, justDate) + 1;
+        }
+        visualRedSegments = visualRedSegments > remaining ? remaining : visualRedSegments;
+
         
         String dueText;
         if (isAccelerated) {
@@ -520,17 +565,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            currencyFormatter.format(
-                              isAccelerated 
-                                ? ((inst.totalMonths - inst.paidMonths) * inst.monthlyPayment) + lateFee
-                                : lateFee > 0
-                                  ? (inst.monthlyPayment * PenaltyEngine.calculateMissedMonths(inst)) + lateFee
-                                  : inst.monthlyPayment
-                            ),
+                            currencyFormatter.format(displayAmountDue),
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: lateFee > 0 ? Colors.red : Colors.black,
+                              color: lateFee > 0 || isOverdue ? Colors.red : Colors.black,
                             ),
                           ),
                         ),
@@ -563,7 +602,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (isAccelerated) {
                     redSegments = totalSegments - paidSegments;
                   } else {
-                    redSegments = PenaltyEngine.calculateMissedMonths(inst);
+                    redSegments = visualRedSegments;
                   }
 
                   Color segmentColor;
@@ -593,23 +632,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: double.infinity,
                   child: OutlinedButton(
                     onPressed: () async {
-                      if (inst.paidMonths < inst.totalMonths) {
-                        int missed = PenaltyEngine.calculateMissedMonths(inst);
-                        int monthsToPay = isAccelerated 
-                            ? (inst.totalMonths - inst.paidMonths)
-                            : (missed <= 0 ? 1 : missed);
-                        
-                        // Prevent paying more months than exist in the plan
-                        if (inst.paidMonths + monthsToPay > inst.totalMonths) {
-                          monthsToPay = inst.totalMonths - inst.paidMonths;
-                        }
+                       if (inst.paidMonths < inst.totalMonths) {
+                         int monthsToPay = actualMonthsToPay;
 
-                        // Distribute the base + penalty across pastPayments
-                        double evenlyDistributedPenalty = lateFee / monthsToPay;
+                         // Distribute the base + penalty across pastPayments
+                         double evenlyDistributedPenalty = lateFee / monthsToPay;
 
-                        for (int i = 0; i < monthsToPay; i++) {
-                          inst.pastPayments = List.from(inst.pastPayments)..add(inst.monthlyPayment + evenlyDistributedPenalty);
-                        }
+                         for (int i = 0; i < monthsToPay; i++) {
+                           inst.pastPayments = List.from(inst.pastPayments)..add(inst.monthlyPayment + evenlyDistributedPenalty);
+                         }
                         
                         inst.paidMonths += monthsToPay;
                         inst.dueDate = DateTime(inst.dueDate.year, inst.dueDate.month + monthsToPay, inst.dueDate.day);
@@ -639,14 +670,53 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: Text(
-                      isAccelerated 
-                        ? 'Settle Full Debt'
-                        : PenaltyEngine.calculateMissedMonths(inst) > 1 
-                          ? 'Pay ${PenaltyEngine.calculateMissedMonths(inst)} Months Arrears' 
-                          : 'Mark Month as Paid', 
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isAccelerated ? Colors.red : Colors.black)
-                    ),
+                    child: isAccelerated
+                      ? RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            children: [
+                              const TextSpan(text: 'Settle Full Debt\n'),
+                              TextSpan(
+                                text: '(${currencyFormatter.format(transactionCost)})',
+                                style: TextStyle(
+                                  color: Colors.red.shade300,
+                                  fontWeight: FontWeight.normal,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: actualMonthsToPay > 1
+                                    ? 'Pay $actualMonthsToPay Months Arrears\n'
+                                    : 'Mark Month as Paid\n',
+                              ),
+                              TextSpan(
+                                text: '(${currencyFormatter.format(transactionCost)})',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.normal,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                   ),
                 ),
               ],

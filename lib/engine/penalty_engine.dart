@@ -29,14 +29,30 @@ class PenaltyEngine {
     int daysLate = justDate.difference(dueDateJustDate).inDays;
     if (daysLate <= 0) return 0;
     
-    // True calendar math (e.g. if you are 5 days late, months passed is 0, but you are in 1 billing cycle of arrears)
-    return calculateCalendarMonthsPassed(dueDateJustDate, justDate) + 1;
+    int calculatedArrears = calculateCalendarMonthsPassed(dueDateJustDate, justDate);
+    // If daysLate > 0 but calculateCalendarMonthsPassed evaluates to 0, ensure a minimum of 1 month is owed
+    if (daysLate > 0 && calculatedArrears == 0) {
+        calculatedArrears = 1;
+    }
+
+    return calculatedArrears;
   }
 
   static int calculateMissedMonths(Installment inst) {
     int calculatedArrears = calculateUncappedMissedMonths(inst);
     int remainingInstallments = inst.totalMonths - inst.paidMonths;
     return min(calculatedArrears, remainingInstallments);
+  }
+
+  /// Returns the number of months that will actually be transacted when the user
+  /// presses "Mark Month as Paid". Informal loans always pay exactly 1 month;
+  /// commercial/strict rules retain multi-month arrears bundling.
+  static int calculateActualMonthsToPay(Installment inst) {
+    if (inst.status == 'Paid') return 0;
+    bool isInformal = inst.lender == 'None' || inst.lender == 'Other' || inst.lender.isEmpty;
+    if (isInformal) return 1;
+    int missed = calculateMissedMonths(inst);
+    return missed <= 0 ? 1 : missed;
   }
 
   static PenaltyResult calculateLateFees(Installment inst) {
