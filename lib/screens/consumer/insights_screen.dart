@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/hive_service.dart';
 import '../../models/user_account.dart';
+import '../../models/installment.dart';
 import '../../services/time_service.dart';
 import '../../engine/affordability_engine.dart';
 import '../../engine/penalty_engine.dart';
@@ -211,8 +212,11 @@ class InsightsScreen extends StatelessWidget {
                   style: TextStyle(color: Colors.grey, fontSize: 16),
                 ),
                 const SizedBox(height: 24),
-                
-                // Income Benchmarking Section
+
+                // ── Affordability Advisor Card ─────────────────────────────
+                _buildAdvisorCard(user, installments.toList()),
+
+                const SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -255,11 +259,22 @@ class InsightsScreen extends StatelessWidget {
                       const SizedBox(height: 24),
                       Builder(
                         builder: (context) {
-                          double totalPayments = AffordabilityEngine.calculateTotalMonthlyPayment(user);
-                          double income = user.monthlyIncome;
-                          double available = income - totalPayments;
-                          double percentage = income > 0 ? (totalPayments / income) : 0;
-                          
+                          final DateTime now = TimeService.now();
+                          final DateRange cycle =
+                              AffordabilityEngine.getCurrentBillingCycle(user.salaryDay, now);
+                          final double owed =
+                              AffordabilityEngine.getOwedInCycle(installments.toList(), cycle);
+                          final double paid =
+                              AffordabilityEngine.getPaidInCycle(installments.toList(), cycle);
+                          final double totalCommitted = owed + paid;
+                          final double income = user.monthlyIncome;
+                          // Available cash = income minus everything committed this cycle
+                          final double available =
+                              AffordabilityEngine.calculateSafeToSpend(
+                                  installments.toList(), income, user.salaryDay);
+                          final double percentage =
+                              income > 0 ? (totalCommitted / income) : 0;
+
                           Color barColor = Colors.green;
                           if (percentage > 0.8) {
                             barColor = Colors.red;
@@ -293,7 +308,7 @@ class InsightsScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 24),
                               LinearProgressIndicator(
-                                value: percentage,
+                                value: percentage.clamp(0.0, 1.0),
                                 backgroundColor: Colors.grey[200],
                                 valueColor: AlwaysStoppedAnimation<Color>(barColor),
                                 minHeight: 8,
@@ -304,7 +319,7 @@ class InsightsScreen extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text('${(percentage * 100).toStringAsFixed(0)}% Consumed', style: TextStyle(color: barColor, fontWeight: FontWeight.bold, fontSize: 12)),
-                                  Text('${format.format(totalPayments)} Payments', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                  Text('${format.format(totalCommitted)} Committed', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                                 ],
                               )
                             ],
@@ -535,6 +550,97 @@ class InsightsScreen extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Affordability Advisor card
+  // ---------------------------------------------------------------------------
+  Widget _buildAdvisorCard(UserAccount user, List<Installment> installments) {
+    final format = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
+    final DateTime now = TimeService.now();
+    final DateRange cycle =
+        AffordabilityEngine.getCurrentBillingCycle(user.salaryDay, now);
+
+    // Real-time safe-to-spend (resets on incomeDepositDay automatically)
+    final double safeToSpend = AffordabilityEngine.calculateSafeToSpend(
+        installments, user.monthlyIncome, user.salaryDay);
+
+    // Breakdown for the detail line
+    final double owed = AffordabilityEngine.getOwedInCycle(installments, cycle);
+    final double paid = AffordabilityEngine.getPaidInCycle(installments, cycle);
+    final double usedPct = user.monthlyIncome > 0
+        ? ((owed + paid) / user.monthlyIncome) * 100
+        : 0;
+
+    final bool isSafe = safeToSpend >= 0;
+    final Color cardBg =
+        isSafe ? const Color(0xFFF0FAF0) : const Color(0xFFFFF0F0);
+    final Color accentColor =
+        isSafe ? Colors.green[700]! : Colors.red[700]!;
+    final IconData icon =
+        isSafe ? Icons.account_balance_wallet_outlined : Icons.warning_amber_rounded;
+
+    final String cycleLabel =
+        '${DateFormat.MMMd().format(cycle.start)} – ${DateFormat.MMMd().format(cycle.end)}';
+
+    String headline;
+    String detail;
+
+    if (isSafe) {
+      headline =
+          '💳 Safe-to-Spend: ${format.format(safeToSpend)} remaining this cycle';
+      detail =
+          'Cycle: $cycleLabel\n'
+          '${format.format(owed)} still owed  •  ${format.format(paid)} already paid\n'
+          'That\'s ${usedPct.toStringAsFixed(0)}% of your income committed to installments.';
+    } else {
+      headline =
+          '🚨 Over Budget by ${format.format(safeToSpend.abs())} this cycle!';
+      detail =
+          'Cycle: $cycleLabel\n'
+          '${format.format(owed)} still owed  •  ${format.format(paid)} already paid\n'
+          'Your installment obligations exceed your income for this cycle. Avoid new purchases.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accentColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: accentColor, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  headline,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: accentColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  detail,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[700],
+                    height: 1.6,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
