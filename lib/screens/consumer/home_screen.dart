@@ -21,6 +21,50 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _sortBy = 'urgency';
 
+  // --- What-If Simulator state ---
+  final _whatIfCostController = TextEditingController();
+  final _whatIfDownPaymentController = TextEditingController();
+  final _whatIfMonthsController = TextEditingController();
+  SimulatedOutlook? _simulatedOutlook;
+
+  @override
+  void initState() {
+    super.initState();
+    _whatIfCostController.addListener(_runSimulation);
+    _whatIfDownPaymentController.addListener(_runSimulation);
+    _whatIfMonthsController.addListener(_runSimulation);
+  }
+
+  void _runSimulation() {
+    final double? cost = double.tryParse(_whatIfCostController.text);
+    final int? months = int.tryParse(_whatIfMonthsController.text);
+    final double downPayment = double.tryParse(_whatIfDownPaymentController.text) ?? 0.0;
+    if (cost == null || months == null || months <= 0) {
+      setState(() => _simulatedOutlook = null);
+      return;
+    }
+    final box = HiveService.getUserBox();
+    if (box.isEmpty) return;
+    final user = box.values.first;
+    final outlook = AffordabilityEngine.simulatePurchase(
+      itemCost: cost,
+      months: months,
+      downPayment: downPayment,
+      existing: user.installments?.toList() ?? [],
+      monthlyIncome: user.monthlyIncome,
+      salaryDay: user.salaryDay,
+    );
+    setState(() => _simulatedOutlook = outlook);
+  }
+
+  @override
+  void dispose() {
+    _whatIfCostController.dispose();
+    _whatIfDownPaymentController.dispose();
+    _whatIfMonthsController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -173,6 +217,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     return _buildKPICards(totalPaymentThisMonth, totalOutstanding, status, activeCount, nextInstallmentSubtitle);
                   }
                 ),
+                const SizedBox(height: 20),
+                _buildDebtFreeCard(user),
+                const SizedBox(height: 16),
+                _buildSandboxCard(user),
                 const SizedBox(height: 32),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -374,7 +422,353 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Debt-Free Milestone Card
+  // ---------------------------------------------------------------------------
+  Widget _buildDebtFreeCard(UserAccount user) {
+    final List<Installment> active = (user.installments?.toList() ?? [])
+        .where((i) => i.statusEnum != InstallmentStatus.paid)
+        .toList();
+
+    final DateTime debtFreeDate =
+        AffordabilityEngine.getAbsoluteDebtFreeDate(active);
+    final DateTime now = TimeService.now();
+    final bool isDebtFree = active.isEmpty;
+
+    String title;
+    String subtitle;
+    Color bgColor;
+    Color textColor;
+
+    if (isDebtFree) {
+      title = '🎉 You have no active debt!';
+      subtitle = 'All installments are fully paid. Keep it up!';
+      bgColor = const Color(0xFFF0FAF0);
+      textColor = Colors.green[800]!;
+    } else {
+      final String formatted = DateFormat('MMMM yyyy').format(debtFreeDate);
+      final int totalMonths = ((debtFreeDate.year - now.year) * 12) +
+          debtFreeDate.month -
+          now.month;
+      final String timeAway =
+          totalMonths <= 0 ? 'this month' : '$totalMonths month${totalMonths == 1 ? '' : 's'} away';
+      title = '🏁 Debt-Free in $formatted';
+      subtitle = 'You will finish all installments in $formatted ($timeAway).';
+      bgColor = const Color(0xFFF0F4FF);
+      textColor = const Color(0xFF1E3A8A);
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: textColor.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 13,
+              color: textColor.withOpacity(0.75),
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // What-If Sandbox Simulator Card
+  // ---------------------------------------------------------------------------
+  Widget _buildSandboxCard(UserAccount user) {
+    final format = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
+    final SimulatedOutlook? outlook = _simulatedOutlook;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.calculate_outlined,
+                    color: Color(0xFF6366F1), size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Checkout Advisor',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text('Plan a hypothetical purchase',
+                      style: TextStyle(color: Colors.grey, fontSize: 13)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Item Cost',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _whatIfCostController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: '0.0',
+                        filled: true,
+                        fillColor: const Color(0xFFF8F9FA),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF6366F1), width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Down Pmt',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _whatIfDownPaymentController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: '0.0',
+                        filled: true,
+                        fillColor: const Color(0xFFF8F9FA),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF6366F1), width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Months',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _whatIfMonthsController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: '12',
+                        filled: true,
+                        fillColor: const Color(0xFFF8F9FA),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF6366F1), width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (outlook != null) ...[
+            Builder(
+              builder: (context) {
+                Color bgColor;
+                Color borderColor;
+                Color iconColor;
+                IconData iconData;
+                String titleText;
+                String adviceText;
+
+                switch (outlook.riskTier) {
+                  case RiskTier.safe:
+                    bgColor = const Color(0xFFF0FAF0);
+                    borderColor = Colors.green.withOpacity(0.25);
+                    iconColor = Colors.green[700]!;
+                    iconData = Icons.check_circle_outline;
+                    titleText = 'Affordable';
+                    adviceText = 'You\'ll still have EGP ${format.format(outlook.newSafeBuffer)} available every month. Debt finishes in ${DateFormat('MMM yyyy').format(outlook.newDebtFreeDate)}.';
+                    break;
+                  case RiskTier.stretch:
+                    bgColor = const Color(0xFFFFF7E6);
+                    borderColor = Colors.orange.withOpacity(0.25);
+                    iconColor = Colors.orange[800]!;
+                    iconData = Icons.warning_amber_rounded;
+                    titleText = 'Possible, but tight';
+                    adviceText = 'This consumes ${(outlook.foir * 100).toStringAsFixed(0)}% of your income. You\'ll only have EGP ${format.format(outlook.newSafeBuffer)} left.';
+                    break;
+                  case RiskTier.danger:
+                    bgColor = const Color(0xFFFFF5F5);
+                    borderColor = Colors.red.withOpacity(0.25);
+                    iconColor = Colors.red[700]!;
+                    iconData = Icons.error_outline;
+                    titleText = 'Not Recommended';
+                    adviceText = 'This pushes your obligations to ${(outlook.foir * 100).toStringAsFixed(0)}% of your income, exceeding safe limits.';
+                    break;
+                }
+
+                return Column(
+                  children: [
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(iconData, color: iconColor, size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                titleText,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: iconColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            adviceText,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[800],
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _resultRow(
+                            'Monthly obligations',
+                            format.format(outlook.newMonthlyObligation),
+                            outlook.riskTier == RiskTier.danger ? Colors.red[700]! : Colors.black87,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            Text(
+              'Enter an item cost and number of months above to simulate how a new purchase would affect your budget.',
+              style: TextStyle(fontSize: 13, color: Colors.grey[500], height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _resultRow(String label, String value, Color valueColor) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label,
+            style: const TextStyle(fontSize: 13, color: Colors.black54)),
+        Text(value,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: valueColor)),
+      ],
+    );
+  }
+
   Widget _buildInstallmentsList(HiveList<Installment>? installments) {
+
     if (installments == null || installments.isEmpty) {
       return const Text("No active installments");
     }
@@ -706,6 +1100,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       } else if (inst.statusEnum == InstallmentStatus.overdue && inst.dueDate.isAfter(TimeService.now())) {
                         inst.statusEnum = InstallmentStatus.active;
                       }
+                      inst.lastPaidAt = TimeService.now(); // stamp payment time for billing cycle tracking
                       await inst.save();
                     }
                   }

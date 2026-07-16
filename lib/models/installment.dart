@@ -50,6 +50,9 @@ class Installment extends HiveObject {
   @HiveField(14)
   String? warrantyImagePath;
 
+  @HiveField(15)
+  DateTime? lastPaidAt;
+
   Installment({
     required this.id,
     required this.amount,
@@ -66,6 +69,7 @@ class Installment extends HiveObject {
     this.lender = 'Other',
     this.pastPayments = const [],
     this.warrantyImagePath,
+    this.lastPaidAt,
   });
 
   // ---------------------------------------------------------------------------

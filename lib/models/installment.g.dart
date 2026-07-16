@@ -33,13 +33,14 @@ class InstallmentAdapter extends TypeAdapter<Installment> {
       pastPayments:
           fields[13] == null ? [] : (fields[13] as List).cast<double>(),
       warrantyImagePath: fields[14] as String?,
+      lastPaidAt: fields[15] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Installment obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -69,7 +70,9 @@ class InstallmentAdapter extends TypeAdapter<Installment> {
       ..writeByte(13)
       ..write(obj.pastPayments)
       ..writeByte(14)
-      ..write(obj.warrantyImagePath);
+      ..write(obj.warrantyImagePath)
+      ..writeByte(15)
+      ..write(obj.lastPaidAt);
   }
 
   @override

@@ -561,6 +561,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   } else if (widget.installment.statusEnum == InstallmentStatus.overdue && widget.installment.dueDate.isAfter(TimeService.now())) {
                     widget.installment.statusEnum = InstallmentStatus.active;
                   }
+                  widget.installment.lastPaidAt = TimeService.now(); // stamp payment time for billing cycle tracking
                   await widget.installment.save();
                   setState(() {});
                 }
