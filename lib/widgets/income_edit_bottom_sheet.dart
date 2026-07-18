@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../services/hive_service.dart';
+import 'package:qistiraha/core/services/hive_service.dart';
 import 'package:flutter/services.dart';
 
 class IncomeEditBottomSheet extends StatefulWidget {
