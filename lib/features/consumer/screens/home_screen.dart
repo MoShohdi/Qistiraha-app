@@ -175,58 +175,17 @@ class _HomeScreenState extends State<HomeScreen> {
                         
                     int activeCount = activeInstallments.length;
       
-                    String nextInstallmentSubtitle = 'No active installments';
-                    if (activeInstallments.isNotEmpty) {
-                      activeInstallments.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-                      Installment nextInst = activeInstallments.first;
-                      
-                      PenaltyResult pr = PenaltyEngine.calculateLateFees(nextInst);
-                      final currencyFormatter = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
-                      
-                      DateTime now = TimeService.now();
-                      DateTime justDate = DateTime(now.year, now.month, now.day);
-                      DateTime dueDateJustDate = DateTime(nextInst.dueDate.year, nextInst.dueDate.month, nextInst.dueDate.day);
-                      
-                      int daysLate = justDate.difference(dueDateJustDate).inDays;
-                      int daysUntilDue = dueDateJustDate.difference(justDate).inDays;
-
-                      double displayAmountDue;
-                      if (pr.isAccelerated) {
-                        displayAmountDue = ((nextInst.totalMonths - nextInst.paidMonths) * nextInst.monthlyPayment) + pr.lateFee;
-                      } else if (pr.lateFee > 0 || daysLate > 0) {
-                        displayAmountDue = (nextInst.monthlyPayment * PenaltyEngine.calculateMissedMonths(nextInst)) + pr.lateFee;
-                      } else {
-                        displayAmountDue = nextInst.monthlyPayment;
-                      }
-                      
-                      String amountStr = currencyFormatter.format(displayAmountDue);
-                      String formattedDate = DateFormat.MMMd().format(nextInst.dueDate);
-                      String itemDetails = "${nextInst.lender} (${nextInst.itemDescription})";
-
-                      if (pr.isAccelerated) {
-                        nextInstallmentSubtitle = '🚨 DEFAULT: Entire balance of $amountStr is due for $itemDetails!';
-                      } else if (daysLate > 0) {
-                        nextInstallmentSubtitle = '🚨 Overdue since $formattedDate on $itemDetails! Pay $amountStr';
-                      } else if (daysUntilDue >= 0 && daysUntilDue <= 3) {
-                        String timeStr = (daysUntilDue == 0) ? "Today" : "in $daysUntilDue days";
-                        nextInstallmentSubtitle = '⚠️ Due $timeStr for $itemDetails! Pay $amountStr';
-                      } else {
-                        nextInstallmentSubtitle = '📅 Due on $formattedDate for $itemDetails - $amountStr';
-                      }
-                    }
-                    return _buildKPICards(totalPaymentThisMonth, totalOutstanding, status, activeCount, nextInstallmentSubtitle);
+                    return _buildKPICards(totalPaymentThisMonth, totalOutstanding, status, activeCount, "Across all your active installments");
                   }
                 ),
                 const SizedBox(height: 20),
-                _buildDebtFreeCard(user),
-                const SizedBox(height: 16),
                 _buildSandboxCard(user),
                 const SizedBox(height: 32),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Active Installments',
+                      'Your Obligations',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -274,8 +233,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 24),
+                const Text('Short-Term Obligations', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
                 const SizedBox(height: 16),
-                _buildInstallmentsList(user.installments),
+                _buildDebtFreeSubCard(user, isLongTerm: false, titlePrefix: 'Retail Debt-Free'),
+                _buildUrgentWarning(user, false),
+                const SizedBox(height: 16),
+                _buildInstallmentsList(user.installments, false),
+                const SizedBox(height: 32),
+                const Text('Long-Term Assets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 16),
+                _buildDebtFreeSubCard(user, isLongTerm: true, titlePrefix: 'Asset Payoff Target'),
+                _buildUrgentWarning(user, true),
+                const SizedBox(height: 16),
+                _buildInstallmentsList(user.installments, true),
               ],
             ),
           );
@@ -425,9 +396,102 @@ class _HomeScreenState extends State<HomeScreen> {
   // ---------------------------------------------------------------------------
   // Debt-Free Milestone Card
   // ---------------------------------------------------------------------------
-  Widget _buildDebtFreeCard(UserAccount user) {
+  // ---------------------------------------------------------------------------
+  // Urgent Warning Helper
+  // ---------------------------------------------------------------------------
+  Widget _buildUrgentWarning(UserAccount user, bool isLongTerm) {
+    List<Installment> activeInstallments = (user.installments?.toList() ?? <Installment>[])
+        .where((inst) => inst.paidMonths < inst.totalMonths && inst.statusEnum != InstallmentStatus.paid && inst.isLongTerm == isLongTerm)
+        .toList();
+        
+    if (activeInstallments.isEmpty) return const SizedBox.shrink();
+
+    activeInstallments.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    Installment nextInst = activeInstallments.first;
+    
+    PenaltyResult pr = PenaltyEngine.calculateLateFees(nextInst);
+    final currencyFormatter = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
+    
+    DateTime now = TimeService.now();
+    DateTime justDate = DateTime(now.year, now.month, now.day);
+    DateTime dueDateJustDate = DateTime(nextInst.dueDate.year, nextInst.dueDate.month, nextInst.dueDate.day);
+    
+    int daysLate = justDate.difference(dueDateJustDate).inDays;
+    int daysUntilDue = dueDateJustDate.difference(justDate).inDays;
+
+    double displayAmountDue;
+    if (pr.isAccelerated) {
+      displayAmountDue = ((nextInst.totalMonths - nextInst.paidMonths) * nextInst.monthlyPayment) + pr.lateFee;
+    } else if (pr.lateFee > 0 || daysLate > 0) {
+      displayAmountDue = (nextInst.monthlyPayment * PenaltyEngine.calculateMissedMonths(nextInst)) + pr.lateFee;
+    } else {
+      displayAmountDue = nextInst.monthlyPayment;
+    }
+    
+    String amountStr = currencyFormatter.format(displayAmountDue);
+    String formattedDate = DateFormat.MMMd().format(nextInst.dueDate);
+    String itemDetails = "${nextInst.lender} (${nextInst.itemDescription})";
+
+    String warningText = '';
+    Color bgColor = Colors.transparent;
+    Color textColor = Colors.transparent;
+    IconData iconData = Icons.warning;
+
+    if (pr.isAccelerated) {
+      warningText = '🚨 DEFAULT: Entire balance of $amountStr is due for $itemDetails!';
+      bgColor = const Color(0xFFFFF0F0);
+      textColor = Colors.red[800]!;
+      iconData = Icons.error_outline;
+    } else if (daysLate > 0) {
+      warningText = '🚨 Overdue since $formattedDate on $itemDetails! Pay $amountStr';
+      bgColor = const Color(0xFFFFF0F0);
+      textColor = Colors.red[800]!;
+      iconData = Icons.warning_amber_rounded;
+    } else if (daysUntilDue >= 0 && daysUntilDue <= 3) {
+      String timeStr = (daysUntilDue == 0) ? "Today" : "in $daysUntilDue days";
+      warningText = '⚠️ Due $timeStr for $itemDetails! Pay $amountStr';
+      bgColor = const Color(0xFFFFFBE6);
+      textColor = Colors.orange[800]!;
+      iconData = Icons.access_time_rounded;
+    } else {
+      return const SizedBox.shrink(); // Only show if urgent
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: textColor.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(iconData, color: textColor, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                warningText,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildDebtFreeSubCard(UserAccount user, {required bool isLongTerm, required String titlePrefix}) {
     final List<Installment> active = (user.installments?.toList() ?? [])
-        .where((i) => i.statusEnum != InstallmentStatus.paid)
+        .where((i) => i.statusEnum != InstallmentStatus.paid && i.isLongTerm == isLongTerm)
         .toList();
 
     final DateTime debtFreeDate =
@@ -441,8 +505,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Color textColor;
 
     if (isDebtFree) {
-      title = '🎉 You have no active debt!';
-      subtitle = 'All installments are fully paid. Keep it up!';
+      title = '🎉 No active ${isLongTerm ? 'long-term assets' : 'retail debt'}!';
+      subtitle = 'All ${isLongTerm ? 'assets' : 'retail items'} are fully paid. Keep it up!';
       bgColor = const Color(0xFFF0FAF0);
       textColor = Colors.green[800]!;
     } else {
@@ -452,8 +516,8 @@ class _HomeScreenState extends State<HomeScreen> {
           now.month;
       final String timeAway =
           totalMonths <= 0 ? 'this month' : '$totalMonths month${totalMonths == 1 ? '' : 's'} away';
-      title = '🏁 Debt-Free in $formatted';
-      subtitle = 'You will finish all installments in $formatted ($timeAway).';
+      title = '🏁 $titlePrefix in $formatted';
+      subtitle = 'You will finish all ${isLongTerm ? 'assets' : 'retail installments'} in $formatted ($timeAway).';
       bgColor = const Color(0xFFF0F4FF);
       textColor = const Color(0xFF1E3A8A);
     }
@@ -767,17 +831,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildInstallmentsList(HiveList<Installment>? installments) {
+  Widget _buildInstallmentsList(HiveList<Installment>? installments, bool isLongTerm) {
 
     if (installments == null || installments.isEmpty) {
-      return const Text("No active installments");
+      return const Text("No active installments", style: TextStyle(color: Colors.grey));
     }
 
     // Filter active installments
-    final activeList = installments.where((inst) => inst.statusEnum != InstallmentStatus.paid).toList();
+    final activeList = installments.where((inst) => inst.statusEnum != InstallmentStatus.paid && inst.isLongTerm == isLongTerm).toList();
 
     if (activeList.isEmpty) {
-      return const Text("No active installments");
+      return const Text("No active installments", style: TextStyle(color: Colors.grey));
     }
 
     // Sort based on selection
@@ -817,61 +881,47 @@ class _HomeScreenState extends State<HomeScreen> {
         PenaltyResult penaltyResult = PenaltyEngine.calculateLateFees(inst);
         double lateFee = penaltyResult.lateFee;
         bool isAccelerated = penaltyResult.isAccelerated;
-        int remaining = inst.totalMonths - inst.paidMonths;
+        int remainingPeriods = inst.totalPayments - inst.paidPayments;
         
         double displayAmountDue;
 
         // --- Header: total accumulated debt (what the user owes in full) ---
-        int monthsOwed;
+        int periodsOwed;
         if (!isOverdue) {
-          monthsOwed = 1; // upcoming or on-time: show current active month
+          periodsOwed = 1; // upcoming or on-time: show current active period
         } else {
-          // +1 because calculateCalendarMonthsPassed counts COMPLETED months;
-          // the current in-progress late month is also owed.
-          monthsOwed = PenaltyEngine.calculateCalendarMonthsPassed(dueDateJustDate, justDate) + 1;
-          if (monthsOwed > remaining) monthsOwed = remaining; // cap at remaining
+          periodsOwed = PenaltyEngine.calculateUncappedMissedPeriods(inst);
+          if (periodsOwed > remainingPeriods) periodsOwed = remainingPeriods; // cap at remaining
         }
 
         if (isAccelerated) {
-          displayAmountDue = ((inst.totalMonths - inst.paidMonths) * inst.monthlyPayment) + lateFee;
+          displayAmountDue = (remainingPeriods * inst.monthlyPayment) + lateFee;
         } else {
-          displayAmountDue = (inst.monthlyPayment * monthsOwed) + lateFee;
+          displayAmountDue = (inst.monthlyPayment * periodsOwed) + lateFee;
         }
 
-        // --- Button: immediate transaction cost (1 month for informal, arrears for commercial) ---
-        int regularMonthsToPay = PenaltyEngine.calculateActualMonthsToPay(inst);
-        if (inst.paidMonths + regularMonthsToPay > inst.totalMonths) {
-          regularMonthsToPay = inst.totalMonths - inst.paidMonths;
+        // --- Button: immediate transaction cost (1 period for informal, arrears for commercial) ---
+        int regularPeriodsToPay = PenaltyEngine.calculateActualPeriodsToPay(inst);
+        if (inst.paidPayments + regularPeriodsToPay > inst.totalPayments) {
+          regularPeriodsToPay = inst.totalPayments - inst.paidPayments;
         }
-        double regularTransactionCost = (inst.monthlyPayment * regularMonthsToPay) + lateFee;
+        double regularTransactionCost = (inst.monthlyPayment * regularPeriodsToPay) + lateFee;
 
-        int fullMonthsToPay = inst.totalMonths - inst.paidMonths;
-        double fullTransactionCost = (inst.monthlyPayment * fullMonthsToPay) + lateFee;
-
-        // For visual progress bar: strictly missed calendar months (no grace bundling)
-        int missedMonths = 0;
-        if (isOverdue) {
-          missedMonths = PenaltyEngine.calculateCalendarMonthsPassed(dueDateJustDate, justDate);
-          if (missedMonths == 0) missedMonths = 1;
-          missedMonths = missedMonths > remaining ? remaining : missedMonths;
-        }
+        int fullPeriodsToPay = inst.totalPayments - inst.paidPayments;
+        double fullTransactionCost = (inst.monthlyPayment * fullPeriodsToPay) + lateFee;
 
         int visualRedSegments = 0;
         if (isOverdue) {
-          visualRedSegments = PenaltyEngine.calculateCalendarMonthsPassed(dueDateJustDate, justDate) + 1;
+          visualRedSegments = PenaltyEngine.calculateUncappedMissedPeriods(inst);
         }
-        visualRedSegments = visualRedSegments > remaining ? remaining : visualRedSegments;
+        visualRedSegments = visualRedSegments > remainingPeriods ? remainingPeriods : visualRedSegments;
 
         
         String dueText;
         if (isAccelerated) {
           dueText = '⚠️ DEFAULT STATUS: ENTIRE BALANCE DUE';
-        } else if (isOverdue) {
-          dueText = 'Late by ${-daysToDue} days';
-        } else if (daysToDue == 0) {
-          dueText = 'Due today';
         } else {
-          dueText = 'Due in $daysToDue days';
+          dueText = TimeService.formatDueDate(daysToDue);
         }
 
         return AnimatedSize(
@@ -1033,60 +1083,72 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   ),
                   Text(
-                    '${inst.paidMonths} of ${inst.totalMonths} paid',
+                    '${inst.paidPayments} of ${inst.totalPayments} paid',
                     style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              Row(
-                children: List.generate(inst.totalMonths, (index) {
-                  int paidSegments = inst.paidMonths;
-                  int totalSegments = inst.totalMonths;
-                  int redSegments = 0;
+              if (inst.totalPayments <= 20)
+                Row(
+                  children: List.generate(inst.totalPayments, (index) {
+                    int paidSegments = inst.paidPayments;
+                    int totalSegments = inst.totalPayments;
+                    int redSegments = 0;
 
-                  if (isAccelerated) {
-                    redSegments = totalSegments - paidSegments;
-                  } else {
-                    redSegments = visualRedSegments;
-                  }
+                    if (isAccelerated) {
+                      redSegments = totalSegments - paidSegments;
+                    } else {
+                      redSegments = visualRedSegments;
+                    }
 
-                  Color segmentColor;
-                  if (index < paidSegments) {
-                    segmentColor = Colors.black;
-                  } else if (index < paidSegments + redSegments) {
-                    segmentColor = Colors.red;
-                  } else {
-                    segmentColor = Colors.grey[200]!;
-                  }
+                    Color segmentColor;
+                    if (index < paidSegments) {
+                      segmentColor = Colors.black;
+                    } else if (index < paidSegments + redSegments) {
+                      segmentColor = Colors.red;
+                    } else {
+                      segmentColor = Colors.grey[200]!;
+                    }
 
-                  return Expanded(
-                    child: Container(
-                      height: 8,
-                      margin: EdgeInsets.only(right: index == totalSegments - 1 ? 0 : 4),
-                      decoration: BoxDecoration(
-                        color: segmentColor,
-                        borderRadius: BorderRadius.circular(4),
+                    return Expanded(
+                      child: Container(
+                        height: 8,
+                        margin: EdgeInsets.only(right: index == totalSegments - 1 ? 0 : 4),
+                        decoration: BoxDecoration(
+                          color: segmentColor,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
-                    ),
-                  );
-                }),
-              ),
+                    );
+                  }),
+                )
+              else
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: inst.totalPayments > 0 ? inst.paidPayments / inst.totalPayments : 0.0,
+                    backgroundColor: Colors.grey[200],
+                    color: Colors.black,
+                    minHeight: 8,
+                  ),
+                ),
               if (inst.statusEnum != InstallmentStatus.paid) ...[
                 const SizedBox(height: 16),
                 (() {
-                  Future<void> pay(int monthsToPay) async {
-                    if (inst.paidMonths < inst.totalMonths) {
-                      double evenlyDistributedPenalty = lateFee / monthsToPay;
+                  Future<void> pay(int periodsToPay) async {
+                    if (inst.paidPayments < inst.totalPayments) {
+                      double evenlyDistributedPenalty = lateFee / periodsToPay;
 
-                      for (int i = 0; i < monthsToPay; i++) {
+                      for (int i = 0; i < periodsToPay; i++) {
                         inst.pastPayments = List.from(inst.pastPayments)..add(inst.monthlyPayment + evenlyDistributedPenalty);
                       }
                       
-                      inst.paidMonths += monthsToPay;
-                      inst.dueDate = DateTime(inst.dueDate.year, inst.dueDate.month + monthsToPay, inst.dueDate.day);
+                      int monthsToAdvance = periodsToPay * inst.monthsPerPayment;
+                      inst.paidMonths += monthsToAdvance;
+                      inst.dueDate = DateTime(inst.dueDate.year, inst.dueDate.month + monthsToAdvance, inst.dueDate.day);
                       
-                      if (inst.paidMonths >= inst.totalMonths) {
+                      if (inst.paidPayments >= inst.totalPayments) {
                         inst.statusEnum = InstallmentStatus.paid;
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -1110,7 +1172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () => pay(regularMonthsToPay),
+                            onPressed: () => pay(regularPeriodsToPay),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.black,
                               side: BorderSide(color: Colors.grey[300]!),
@@ -1129,9 +1191,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 children: [
                                   TextSpan(
-                                    text: regularMonthsToPay > 1
-                                        ? 'Pay $regularMonthsToPay Months Arrears\n'
-                                        : 'Mark Month as Paid\n',
+                                    text: regularPeriodsToPay > 1
+                                        ? 'Pay $regularPeriodsToPay Arrears\n'
+                                        : 'Mark ${inst.paymentFrequency == 'Monthly' ? 'Month' : inst.paymentFrequency == 'Quarterly' ? 'Quarter' : inst.paymentFrequency == 'Semi-Annually' ? 'Half-Year' : 'Year'} as Paid\n',
                                   ),
                                   TextSpan(
                                     text: '(${currencyFormatter.format(regularTransactionCost)})',
@@ -1149,7 +1211,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: () => pay(fullMonthsToPay),
+                            onPressed: () => pay(fullPeriodsToPay),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
                               foregroundColor: Colors.white,
@@ -1187,7 +1249,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     return SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed: () => pay(regularMonthsToPay),
+                        onPressed: () => pay(regularPeriodsToPay),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.black,
                           side: BorderSide(color: Colors.grey[300]!),
@@ -1206,9 +1268,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             children: [
                               TextSpan(
-                                text: regularMonthsToPay > 1
-                                    ? 'Pay $regularMonthsToPay Months Arrears\n'
-                                    : 'Mark Month as Paid\n',
+                                text: regularPeriodsToPay > 1
+                                    ? 'Pay $regularPeriodsToPay Arrears\n'
+                                    : 'Mark ${inst.paymentFrequency == 'Monthly' ? 'Month' : inst.paymentFrequency == 'Quarterly' ? 'Quarter' : inst.paymentFrequency == 'Semi-Annually' ? 'Half-Year' : 'Year'} as Paid\n',
                               ),
                               TextSpan(
                                 text: '(${currencyFormatter.format(regularTransactionCost)})',

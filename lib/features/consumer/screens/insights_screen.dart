@@ -56,8 +56,15 @@ _BudgetStatus _getBudgetStatus(double pct) {
   }
 }
 
-class InsightsScreen extends StatelessWidget {
+class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
+
+  @override
+  State<InsightsScreen> createState() => _InsightsScreenState();
+}
+
+class _InsightsScreenState extends State<InsightsScreen> {
+  String _chartFilter = 'All';
 
   @override
   Widget build(BuildContext context) {
@@ -85,138 +92,143 @@ class InsightsScreen extends StatelessWidget {
           var installments = user.installments!;
 
           // Calculate category distribution
-          Map<String, double> categoryTotals = {};
-          double totalDebt = 0;
+          Map<String, double> shortTermTotals = {};
+          Map<String, double> longTermTotals = {};
+          double shortTermDebt = 0;
+          double longTermDebt = 0;
+          
           for (var inst in installments) {
             if (inst.statusEnum != InstallmentStatus.paid) {
-              double remaining = (inst.totalMonths - inst.paidMonths) * inst.monthlyPayment;
-              categoryTotals[inst.category] = (categoryTotals[inst.category] ?? 0) + remaining;
-              totalDebt += remaining;
+              double drain = inst.monthlyPayment;
+              if (inst.paymentFrequency == 'Quarterly') {
+                drain /= 3;
+              } else if (inst.paymentFrequency == 'Annually') {
+                drain /= 12;
+              } else if (inst.paymentFrequency == 'Semi-Annually') {
+                drain /= 6;
+              }
+              
+              if (inst.isLongTerm) {
+                longTermTotals[inst.category] = (longTermTotals[inst.category] ?? 0) + drain;
+                longTermDebt += drain;
+              } else {
+                shortTermTotals[inst.category] = (shortTermTotals[inst.category] ?? 0) + drain;
+                shortTermDebt += drain;
+              }
             }
           }
 
-          List<PieChartSectionData> pieSections = [];
-          List<Widget> legendItems = [];
+          // Dynamic scaling logic
+          int stepSize = 1;
+          int numBuckets = 6;
           
-          List<Color> colors = [Colors.blue, Colors.purple, Colors.redAccent, Colors.green];
-          int cIdx = 0;
-          
-          categoryTotals.forEach((category, amount) {
-            double percentage = (amount / totalDebt) * 100;
-            Color color = colors[cIdx % colors.length];
-            pieSections.add(
-              PieChartSectionData(
-                color: color,
-                value: percentage,
-                title: '',
-                radius: 40,
-              ),
-            );
+          if (_chartFilter == 'Quarterly') {
+            stepSize = 3;
+            numBuckets = 4;
+          } else if (_chartFilter == 'Semi-Annually') {
+            stepSize = 6;
+            numBuckets = 4;
+          } else if (_chartFilter == 'Annually') {
+            stepSize = 12;
+            numBuckets = 4;
+          }
 
-            legendItems.add(
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(category, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                    Text('${percentage.toStringAsFixed(0)}%'),
-                  ],
-                ),
-              ),
-            );
-            cIdx++;
-          });
-
-          // Dynamic forecast for 6 months
           List<BarChartGroupData> barGroups = [];
           DateTime now = TimeService.now();
-          List<String> months = ['Now'];
-          for (int i = 1; i < 6; i++) {
-            DateTime mDate = DateTime(now.year, now.month + i, 1);
-            months.add(DateFormat('MMM').format(mDate));
+          List<String> labels = [];
+          
+          for (int i = 0; i < numBuckets; i++) {
+            if (i == 0 && _chartFilter == 'All') {
+              labels.add('Now');
+            } else {
+              DateTime mDate = DateTime(now.year, now.month + (i * stepSize), 1);
+              if (_chartFilter == 'Annually') {
+                labels.add(DateFormat('yyyy').format(mDate));
+              } else if (_chartFilter == 'Quarterly' || _chartFilter == 'Semi-Annually') {
+                DateTime endDate = DateTime(now.year, now.month + (i * stepSize) + stepSize - 1, 1);
+                String startStr = DateFormat('MMM').format(mDate);
+                String endStr = DateFormat('MMM').format(endDate);
+                labels.add('$startStr-$endStr');
+              } else {
+                labels.add(DateFormat('MMM').format(mDate));
+              }
+            }
           }
 
           Color colorDefault = Colors.red;
           Color colorDueNow = const Color(0xFF2E65F3);
           Color colorFuture = Colors.grey[300]!;
 
-          double maxForecast = 0;
+          List<double> buckets = List.filled(numBuckets, 0.0);
+          List<List<BarChartRodStackItem>> stackItemsByMonth = List.generate(numBuckets, (_) => []);
 
-          for (int i = 0; i < 6; i++) {
-            double currentY = 0;
-            List<BarChartRodStackItem> stackItems = [];
-            
-            for (var inst in installments) {
-              if (inst.statusEnum != InstallmentStatus.paid) {
-                PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
-                int remaining = inst.totalMonths - inst.paidMonths;
+          for (var inst in installments) {
+            if (inst.statusEnum != InstallmentStatus.paid) {
+              PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
 
-                if (i == 0) {
-                  // The "Now" pillar
-                  DateTime justDate = DateTime(now.year, now.month, now.day);
-                  DateTime dueDateJustDate = DateTime(inst.dueDate.year, inst.dueDate.month, inst.dueDate.day);
-                  int daysLate = justDate.difference(dueDateJustDate).inDays;
+              if (pr.isAccelerated) {
+                int remaining = inst.totalPayments - inst.paidPayments;
+                double amount = (remaining * inst.monthlyPayment) + pr.lateFee;
+                if (amount > 0) {
+                  stackItemsByMonth[0].add(BarChartRodStackItem(buckets[0], buckets[0] + amount, colorDefault));
+                  buckets[0] += amount;
+                }
+              } else {
+                int missed = PenaltyEngine.calculateUncappedMissedPeriods(inst);
+                if (missed > 0) {
+                  double amount = (missed * inst.monthlyPayment) + pr.lateFee;
+                  stackItemsByMonth[0].add(BarChartRodStackItem(buckets[0], buckets[0] + amount, colorDefault));
+                  buckets[0] += amount;
+                }
 
-                  double amountToAdd = 0;
-                  Color segColor = colorDueNow;
+                int paymentsAdded = 0;
+                int remainingPayments = inst.totalPayments - inst.paidPayments;
+                DateTime projectedDate = inst.dueDate;
+                
+                // If we missed payments, the next future payment is shifted forward
+                if (missed > 0) {
+                   int monthsToAdvance = missed * inst.monthsPerPayment;
+                   projectedDate = DateTime(projectedDate.year, projectedDate.month + monthsToAdvance, projectedDate.day);
+                }
 
-                  if (daysLate > 0 || pr.isAccelerated) {
-                    segColor = colorDefault;
-                    if (pr.isAccelerated) {
-                      amountToAdd = (remaining * inst.monthlyPayment) + pr.lateFee;
-                    } else {
-                      amountToAdd = (inst.monthlyPayment * PenaltyEngine.calculateMissedMonths(inst)) + pr.lateFee;
-                    }
-                  } else if (inst.dueDate.year == now.year && inst.dueDate.month == now.month) {
-                    segColor = colorDueNow;
-                    amountToAdd = inst.monthlyPayment;
+                while (paymentsAdded < remainingPayments) {
+                  int monthsDiff = ((projectedDate.year - now.year) * 12) + projectedDate.month - now.month;
+
+                  int bucketIndex = monthsDiff ~/ stepSize;
+                  if (bucketIndex >= numBuckets) {
+                    break; // Past our dynamic window
                   }
 
-                  if (amountToAdd > 0) {
-                    stackItems.add(BarChartRodStackItem(currentY, currentY + amountToAdd, segColor));
-                    currentY += amountToAdd;
-                  }
-                } else {
-                  // Future forecast
-                  if (!pr.isAccelerated) {
-                    DateTime targetMonth = DateTime(now.year, now.month + i, 1);
-                    int targetAbsolute = (targetMonth.year * 12) + targetMonth.month;
-                    int dueAbsolute = (inst.dueDate.year * 12) + inst.dueDate.month;
-                    int maturityAbsolute = dueAbsolute + remaining - 1;
-
-                    // Only add the base payment if the target month falls within the loan's lifespan
-                    if (targetAbsolute >= dueAbsolute && targetAbsolute <= maturityAbsolute) {
-                      double amount = inst.monthlyPayment;
-                      stackItems.add(BarChartRodStackItem(currentY, currentY + amount, colorFuture));
-                      currentY += amount;
+                  if (bucketIndex >= 0) {
+                    if (monthsDiff == 0 && missed == 0) {
+                      stackItemsByMonth[bucketIndex].add(BarChartRodStackItem(buckets[bucketIndex], buckets[bucketIndex] + inst.monthlyPayment, colorDueNow));
+                      buckets[bucketIndex] += inst.monthlyPayment;
+                    } else if (monthsDiff > 0) {
+                      stackItemsByMonth[bucketIndex].add(BarChartRodStackItem(buckets[bucketIndex], buckets[bucketIndex] + inst.monthlyPayment, colorFuture));
+                      buckets[bucketIndex] += inst.monthlyPayment;
                     }
                   }
+
+                  projectedDate = DateTime(projectedDate.year, projectedDate.month + inst.monthsPerPayment, projectedDate.day);
+                  paymentsAdded++;
                 }
               }
             }
-            
-            if (currentY > maxForecast) maxForecast = currentY;
+          }
 
+          final double maxBucket = buckets.isEmpty ? 0.0 : buckets.reduce((curr, next) => curr > next ? curr : next);
+          final double chartMaxY = maxBucket > 0 ? maxBucket * 1.2 : 10000;
+
+          for (int i = 0; i < numBuckets; i++) {
             barGroups.add(
               BarChartGroupData(
                 x: i,
                 barRods: [
                   BarChartRodData(
-                    toY: currentY,
+                    toY: buckets[i],
                     width: 32,
                     borderRadius: BorderRadius.circular(6),
-                    rodStackItems: stackItems,
+                    rodStackItems: stackItemsByMonth[i],
                     color: Colors.transparent, // stack items provide colors
                   ),
                 ],
@@ -379,7 +391,35 @@ class InsightsScreen extends StatelessWidget {
                   ),
                 ),
                 
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: ['All', 'Quarterly', 'Semi-Annually', 'Annually'].map((filter) {
+                      final isSelected = _chartFilter == filter;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: FilterChip(
+                          label: Text(filter, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontSize: 13, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                          selected: isSelected,
+                          onSelected: (bool selected) {
+                            setState(() {
+                              _chartFilter = filter;
+                            });
+                          },
+                          backgroundColor: Colors.white,
+                          selectedColor: const Color(0xFF6366F1),
+                          checkmarkColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(color: isSelected ? const Color(0xFF6366F1) : Colors.grey[300]!),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 
                 // Bar Chart Section
                 Container(
@@ -397,9 +437,9 @@ class InsightsScreen extends StatelessWidget {
                         children: [
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text('Monthly Payments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              Text('Your upcoming year', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                            children: [
+                              Text(_chartFilter == 'All' ? 'All Payments' : 'Grouped $_chartFilter', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text(_chartFilter == 'All' ? 'Your upcoming half-year' : 'Your upcoming projected timeline', style: const TextStyle(color: Colors.grey, fontSize: 14)),
                             ],
                           ),
                           Container(
@@ -418,7 +458,7 @@ class InsightsScreen extends StatelessWidget {
                         child: BarChart(
                           BarChartData(
                             alignment: BarChartAlignment.spaceAround,
-                            maxY: maxForecast > 0 ? maxForecast * 1.2 : 100,
+                            maxY: chartMaxY,
                             barTouchData: BarTouchData(
                               enabled: true,
                               touchTooltipData: BarTouchTooltipData(
@@ -460,11 +500,11 @@ class InsightsScreen extends StatelessWidget {
                                 sideTitles: SideTitles(
                                   showTitles: true,
                                   getTitlesWidget: (double value, TitleMeta meta) {
-                                    if (value.toInt() >= months.length) return const SizedBox.shrink();
+                                    if (value.toInt() >= labels.length) return const SizedBox.shrink();
                                     return SideTitleWidget(
                                       axisSide: meta.axisSide,
                                       child: Text(
-                                        months[value.toInt()],
+                                        labels[value.toInt()],
                                         style: const TextStyle(
                                           fontWeight: FontWeight.normal,
                                           fontSize: 12,
@@ -477,12 +517,23 @@ class InsightsScreen extends StatelessWidget {
                               leftTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true,
-                                  reservedSize: 40,
+                                  reservedSize: 44,
+                                  interval: chartMaxY / 5,
                                   getTitlesWidget: (double value, TitleMeta meta) {
+                                    String text;
+                                    if (value == 0) {
+                                      text = '0';
+                                    } else if (value >= 1000000) {
+                                      text = '${(value / 1000000).toStringAsFixed(1).replaceAll('.0', '')}M';
+                                    } else if (value >= 1000) {
+                                      text = '${(value / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
+                                    } else {
+                                      text = value.toStringAsFixed(0);
+                                    }
                                     return SideTitleWidget(
                                       axisSide: meta.axisSide,
                                       child: Text(
-                                        value.toInt().toString(),
+                                        text,
                                         style: const TextStyle(fontSize: 10, color: Colors.grey),
                                       ),
                                     );
@@ -495,7 +546,7 @@ class InsightsScreen extends StatelessWidget {
                             gridData: FlGridData(
                               show: true,
                               drawVerticalLine: false,
-                              horizontalInterval: maxForecast > 0 ? (maxForecast / 4).ceilToDouble() : 50,
+                              horizontalInterval: chartMaxY / 5,
                               getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey[200], strokeWidth: 1),
                             ),
                             borderData: FlBorderData(show: false),
@@ -528,77 +579,133 @@ class InsightsScreen extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // Donut Chart Section
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey[200]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text('Debt by Category', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              Text('Based on your active installments', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                            ],
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.blue[50],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(Icons.pie_chart_outline, color: Colors.blue),
-                          )
-                        ],
-                      ),
-                      const SizedBox(height: 32),
-                      SizedBox(
-                        height: 200,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            PieChart(
-                              PieChartData(
-                                sectionsSpace: 0,
-                                centerSpaceRadius: 60,
-                                sections: pieSections,
-                              ),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '${categoryTotals.keys.length}',
-                                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                                ),
-                                const Text(
-                                  'Categories',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      Column(
-                        children: legendItems,
-                      )
-                    ],
-                  ),
-                ),
+                // Donut Chart Sections
+                if (shortTermTotals.isNotEmpty) ...[
+                  _buildDonutChart('Retail Cash Flow', 'Based on active short-term obligations', shortTermTotals, shortTermDebt),
+                  const SizedBox(height: 24),
+                ],
+                if (longTermTotals.isNotEmpty) ...[
+                  _buildDonutChart('Asset Cash Flow', 'Based on active long-term assets', longTermTotals, longTermDebt),
+                ],
               ],
             ),
           );
         },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Donut Chart Widget Helper
+  // ---------------------------------------------------------------------------
+  Widget _buildDonutChart(String title, String subtitle, Map<String, double> categoryTotals, double totalDebt) {
+    List<PieChartSectionData> pieSections = [];
+    List<Widget> legendItems = [];
+    
+    List<Color> colors = [Colors.blue, Colors.purple, Colors.redAccent, Colors.green, Colors.orange];
+    int cIdx = 0;
+    
+    categoryTotals.forEach((category, amount) {
+      double percentage = (amount / totalDebt) * 100;
+      Color color = colors[cIdx % colors.length];
+      pieSections.add(
+        PieChartSectionData(
+          color: color,
+          value: percentage,
+          title: '',
+          radius: 40,
+        ),
+      );
+
+      legendItems.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(category, style: const TextStyle(fontWeight: FontWeight.w600)),
+                ],
+              ),
+              Text('${percentage.toStringAsFixed(0)}%'),
+            ],
+          ),
+        ),
+      );
+      cIdx++;
+    });
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.pie_chart_outline, color: Colors.blue),
+              )
+            ],
+          ),
+          const SizedBox(height: 32),
+          SizedBox(
+            height: 200,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
+                  PieChartData(
+                    sectionsSpace: 0,
+                    centerSpaceRadius: 60,
+                    sections: pieSections,
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${categoryTotals.keys.length}',
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    ),
+                    const Text(
+                      'Categories',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          Column(
+            children: legendItems,
+          )
+        ],
       ),
     );
   }

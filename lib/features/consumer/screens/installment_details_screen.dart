@@ -291,45 +291,59 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.blueGrey[800]),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: List.generate(widget.installment.totalMonths, (index) {
-              int paidSegments = widget.installment.paidMonths;
-              int totalSegments = widget.installment.totalMonths;
-              int redSegments = 0;
+          if (widget.installment.totalPayments <= 20)
+            Row(
+              children: List.generate(widget.installment.totalPayments, (index) {
+                int paidSegments = widget.installment.paidPayments;
+                int totalSegments = widget.installment.totalPayments;
+                int redSegments = 0;
 
-              PenaltyResult pr = PenaltyEngine.calculateLateFees(widget.installment);
-              if (pr.isAccelerated) {
-                redSegments = totalSegments - paidSegments;
-              } else {
-                redSegments = PenaltyEngine.calculateMissedMonths(widget.installment);
-              }
+                PenaltyResult pr = PenaltyEngine.calculateLateFees(widget.installment);
+                if (pr.isAccelerated) {
+                  redSegments = totalSegments - paidSegments;
+                } else {
+                  redSegments = PenaltyEngine.calculateUncappedMissedPeriods(widget.installment);
+                  if (redSegments > (totalSegments - paidSegments)) {
+                    redSegments = totalSegments - paidSegments;
+                  }
+                }
 
-              Color segmentColor;
-              if (index < paidSegments) {
-                segmentColor = Colors.blueGrey[800]!;
-              } else if (index < paidSegments + redSegments) {
-                segmentColor = Colors.red;
-              } else {
-                segmentColor = Colors.grey[200]!;
-              }
+                Color segmentColor;
+                if (index < paidSegments) {
+                  segmentColor = Colors.blueGrey[800]!;
+                } else if (index < paidSegments + redSegments) {
+                  segmentColor = Colors.red;
+                } else {
+                  segmentColor = Colors.grey[200]!;
+                }
 
-              return Expanded(
-                child: Container(
-                  height: 6,
-                  margin: EdgeInsets.only(right: index == totalSegments - 1 ? 0 : 4),
-                  decoration: BoxDecoration(
-                    color: segmentColor,
-                    borderRadius: BorderRadius.circular(3),
+                return Expanded(
+                  child: Container(
+                    height: 8,
+                    margin: EdgeInsets.only(right: index == totalSegments - 1 ? 0 : 4),
+                    decoration: BoxDecoration(
+                      color: segmentColor,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
-                ),
-              );
-            }),
-          ),
+                );
+              }),
+            )
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: widget.installment.totalPayments > 0 ? widget.installment.paidPayments / widget.installment.totalPayments : 0.0,
+                backgroundColor: Colors.grey[200],
+                color: Colors.blueGrey[800],
+                minHeight: 8,
+              ),
+            ),
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
             child: Text(
-              '${widget.installment.paidMonths} of ${widget.installment.totalMonths} paid',
+              '${widget.installment.paidPayments} of ${widget.installment.totalPayments} paid',
               style: TextStyle(color: Colors.grey[600], fontSize: 12),
             ),
           ),
@@ -412,7 +426,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               if (penaltyRatio == 0)
                 const SizedBox(),
               Text(
-                '${widget.installment.paidMonths} of ${widget.installment.totalMonths} paid',
+                '${widget.installment.paidPayments} of ${widget.installment.totalPayments} paid',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ],
@@ -487,9 +501,9 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             child: Text(
               currencyFormatter.format(
                 isAccelerated 
-                  ? ((widget.installment.totalMonths - widget.installment.paidMonths) * widget.installment.monthlyPayment) + lateFee
+                  ? ((widget.installment.totalPayments - widget.installment.paidPayments) * widget.installment.monthlyPayment) + lateFee
                   : lateFee > 0
-                    ? (widget.installment.monthlyPayment * PenaltyEngine.calculateMissedMonths(widget.installment)) + lateFee
+                    ? (widget.installment.monthlyPayment * PenaltyEngine.calculateUncappedMissedPeriods(widget.installment)) + lateFee
                     : widget.installment.monthlyPayment
               ),
               style: TextStyle(
@@ -527,26 +541,27 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
           if (widget.installment.statusEnum != InstallmentStatus.paid) ...[
             const SizedBox(height: 20),
             (() {
-              int regularMonthsToPay = PenaltyEngine.calculateActualMonthsToPay(widget.installment);
-              if (widget.installment.paidMonths + regularMonthsToPay > widget.installment.totalMonths) {
-                regularMonthsToPay = widget.installment.totalMonths - widget.installment.paidMonths;
+              int regularPeriodsToPay = PenaltyEngine.calculateActualPeriodsToPay(widget.installment);
+              if (widget.installment.paidPayments + regularPeriodsToPay > widget.installment.totalPayments) {
+                regularPeriodsToPay = widget.installment.totalPayments - widget.installment.paidPayments;
               }
-              double regularTransactionCost = (widget.installment.monthlyPayment * regularMonthsToPay) + lateFee;
+              double regularTransactionCost = (widget.installment.monthlyPayment * regularPeriodsToPay) + lateFee;
 
-              int fullMonthsToPay = widget.installment.totalMonths - widget.installment.paidMonths;
-              double fullTransactionCost = (widget.installment.monthlyPayment * fullMonthsToPay) + lateFee;
+              int fullPeriodsToPay = widget.installment.totalPayments - widget.installment.paidPayments;
+              double fullTransactionCost = (widget.installment.monthlyPayment * fullPeriodsToPay) + lateFee;
 
-              Future<void> pay(int monthsToPay) async {
-                if (widget.installment.paidMonths < widget.installment.totalMonths) {
-                  double evenlyDistributedPenalty = lateFee / monthsToPay;
-                  for (int i = 0; i < monthsToPay; i++) {
+              Future<void> pay(int periodsToPay) async {
+                if (widget.installment.paidPayments < widget.installment.totalPayments) {
+                  double evenlyDistributedPenalty = lateFee / periodsToPay;
+                  for (int i = 0; i < periodsToPay; i++) {
                     widget.installment.pastPayments = List.from(widget.installment.pastPayments)..add(widget.installment.monthlyPayment + evenlyDistributedPenalty);
                   }
                   
-                  widget.installment.paidMonths += monthsToPay;
-                  widget.installment.dueDate = DateTime(widget.installment.dueDate.year, widget.installment.dueDate.month + monthsToPay, widget.installment.dueDate.day);
+                  int monthsToAdvance = periodsToPay * widget.installment.monthsPerPayment;
+                  widget.installment.paidMonths += monthsToAdvance;
+                  widget.installment.dueDate = DateTime(widget.installment.dueDate.year, widget.installment.dueDate.month + monthsToAdvance, widget.installment.dueDate.day);
                   
-                  if (widget.installment.paidMonths >= widget.installment.totalMonths) {
+                  if (widget.installment.paidPayments >= widget.installment.totalPayments) {
                     widget.installment.statusEnum = InstallmentStatus.paid;
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -572,7 +587,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => pay(regularMonthsToPay),
+                        onPressed: () => pay(regularPeriodsToPay),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.black,
                           side: BorderSide(color: Colors.grey[300]!),
@@ -591,9 +606,9 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                             ),
                             children: [
                               TextSpan(
-                                text: regularMonthsToPay > 1
-                                    ? 'Pay $regularMonthsToPay Months Arrears\n'
-                                    : 'Mark Month as Paid\n',
+                                text: regularPeriodsToPay > 1
+                                    ? 'Pay $regularPeriodsToPay Arrears\n'
+                                    : 'Mark ${widget.installment.paymentFrequency == 'Monthly' ? 'Month' : widget.installment.paymentFrequency == 'Quarterly' ? 'Quarter' : widget.installment.paymentFrequency == 'Semi-Annually' ? 'Half-Year' : 'Year'} as Paid\n',
                               ),
                               TextSpan(
                                 text: '(${currencyFormatter.format(regularTransactionCost)})',
@@ -611,7 +626,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () => pay(fullMonthsToPay),
+                        onPressed: () => pay(fullPeriodsToPay),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
                           foregroundColor: Colors.white,
@@ -649,7 +664,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                 return SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
-                    onPressed: () => pay(regularMonthsToPay),
+                    onPressed: () => pay(regularPeriodsToPay),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.black,
                       side: BorderSide(color: Colors.grey[300]!),
@@ -668,9 +683,9 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                         ),
                         children: [
                           TextSpan(
-                            text: regularMonthsToPay > 1
-                                ? 'Pay $regularMonthsToPay Months Arrears\n'
-                                : 'Mark Month as Paid\n',
+                                text: regularPeriodsToPay > 1
+                                    ? 'Pay $regularPeriodsToPay Arrears\n'
+                                    : 'Mark ${widget.installment.paymentFrequency == 'Monthly' ? 'Month' : widget.installment.paymentFrequency == 'Quarterly' ? 'Quarter' : widget.installment.paymentFrequency == 'Semi-Annually' ? 'Half-Year' : 'Year'} as Paid\n',
                           ),
                           TextSpan(
                             text: '(${currencyFormatter.format(regularTransactionCost)})',

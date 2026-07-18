@@ -74,6 +74,16 @@ class AffordabilityEngine {
     }
   }
 
+  static double _getMonthlyDrain(Installment inst) {
+    double drain = inst.monthlyPayment;
+    if (inst.paymentFrequency == 'Quarterly') {
+      drain /= 3;
+    } else if (inst.paymentFrequency == 'Annually') {
+      drain /= 12;
+    }
+    return drain;
+  }
+
   static double calculateTotalMonthlyPayment(UserAccount user) {
     if (user.installments == null || user.installments!.isEmpty) return 0.0;
 
@@ -92,18 +102,18 @@ class AffordabilityEngine {
           double displayAmountDue;
           if (pr.isAccelerated) {
             displayAmountDue =
-                ((inst.totalMonths - inst.paidMonths) * inst.monthlyPayment) +
+                ((inst.totalMonths - inst.paidMonths) * _getMonthlyDrain(inst)) +
                     pr.lateFee;
           } else {
             displayAmountDue =
-                (inst.monthlyPayment *
+                (_getMonthlyDrain(inst) *
                     PenaltyEngine.calculateMissedMonths(inst)) +
                     pr.lateFee;
           }
           total += displayAmountDue;
         } else if (inst.dueDate.year == now.year &&
             inst.dueDate.month == now.month) {
-          total += inst.monthlyPayment;
+          total += _getMonthlyDrain(inst);
         }
       }
     }
@@ -211,7 +221,7 @@ class AffordabilityEngine {
 
       if (isDueInCycle || isOverdue) {
         PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
-        total += inst.monthlyPayment + pr.lateFee;
+        total += _getMonthlyDrain(inst) + pr.lateFee;
       }
     }
     return total;
@@ -238,7 +248,7 @@ class AffordabilityEngine {
 
       if (isDueInCycle || isOverdue) {
         PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
-        total += inst.monthlyPayment + pr.lateFee;
+        total += _getMonthlyDrain(inst) + pr.lateFee;
       }
     }
     return total;
@@ -264,7 +274,7 @@ class AffordabilityEngine {
           !paidAt.isBefore(cycle.start) && !paidAt.isAfter(cycle.end);
 
       if (paidInWindow) {
-        total += inst.monthlyPayment;
+        total += _getMonthlyDrain(inst);
       }
     }
     return total;
@@ -330,7 +340,7 @@ class AffordabilityEngine {
     // Sum all active monthly payments (base installment amounts only, no penalties).
     double currentObligations = existing
         .where((i) => i.statusEnum != InstallmentStatus.paid)
-        .fold(0.0, (sum, i) => sum + i.monthlyPayment);
+        .fold(0.0, (sum, i) => sum + _getMonthlyDrain(i));
     double realAvailableBuffer = monthlyIncome - currentObligations;
 
     // The new payment eats into the discretionary buffer.

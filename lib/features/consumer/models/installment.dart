@@ -53,6 +53,12 @@ class Installment extends HiveObject {
   @HiveField(15)
   DateTime? lastPaidAt;
 
+  @HiveField(16, defaultValue: false)
+  bool isLongTerm;
+
+  @HiveField(17, defaultValue: 'Monthly')
+  String paymentFrequency;
+
   Installment({
     required this.id,
     required this.amount,
@@ -70,6 +76,8 @@ class Installment extends HiveObject {
     this.pastPayments = const [],
     this.warrantyImagePath,
     this.lastPaidAt,
+    this.isLongTerm = false,
+    this.paymentFrequency = 'Monthly',
   });
 
   // ---------------------------------------------------------------------------
@@ -81,4 +89,21 @@ class Installment extends HiveObject {
 
   LenderType get lenderEnum => LenderType.fromRaw(lender);
   set lenderEnum(LenderType l) => lender = l.raw;
+
+  // ---------------------------------------------------------------------------
+  // Frequency math helpers
+  // ---------------------------------------------------------------------------
+
+  int get monthsPerPayment {
+    switch (paymentFrequency) {
+      case 'Quarterly': return 3;
+      case 'Semi-Annually': return 6;
+      case 'Annually': return 12;
+      case 'Monthly':
+      default: return 1;
+    }
+  }
+
+  int get totalPayments => totalMonths ~/ monthsPerPayment;
+  int get paidPayments => paidMonths ~/ monthsPerPayment;
 }

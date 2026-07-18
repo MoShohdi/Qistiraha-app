@@ -81,6 +81,8 @@ class AddInstallmentController {
     required double downPayment,
     required double interestRate,
     required String category,
+    required bool isLongTerm,
+    required String paymentFrequency,
   }) async {
     final userBox = HiveService.getUserBox();
     if (userBox.isEmpty) {
@@ -102,6 +104,8 @@ class AddInstallmentController {
       downPayment: downPayment,
       interestRate: interestRate,
       category: category,
+      isLongTerm: isLongTerm,
+      paymentFrequency: paymentFrequency,
     );
 
     final installmentBox = HiveService.getInstallmentBox();
