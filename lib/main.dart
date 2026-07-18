@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'services/hive_service.dart';
-import 'screens/consumer/home_screen.dart';
-import 'screens/consumer/insights_screen.dart';
-import 'screens/consumer/history_screen.dart';
-import 'screens/consumer/profile_screen.dart';
+import 'core/services/hive_service.dart';
+import 'features/consumer/screens/home_screen.dart';
+import 'features/consumer/screens/insights_screen.dart';
+import 'features/consumer/screens/history_screen.dart';
+import 'features/consumer/screens/profile_screen.dart';
 
-import 'services/auth_service.dart';
-import 'screens/auth/welcome_screen.dart';
+import 'features/auth/services/auth_service.dart';
+import 'features/auth/screens/welcome_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
