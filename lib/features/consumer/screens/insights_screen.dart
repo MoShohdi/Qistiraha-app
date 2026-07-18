@@ -11,6 +11,51 @@ import 'package:qistiraha/core/engine/penalty_engine.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import '../../../widgets/income_edit_bottom_sheet.dart';
 
+// ---------------------------------------------------------------------------
+// Budget Status helper — evaluated once, consumed by both cards
+// ---------------------------------------------------------------------------
+
+class _BudgetStatus {
+  final String label;     // e.g. "Safe-to-Spend"
+  final Color tierColor;  // dominant accent color
+  final Color bgColor;    // light tint for card backgrounds
+  final String tierName;  // e.g. "Optimized"
+
+  const _BudgetStatus({
+    required this.label,
+    required this.tierColor,
+    required this.bgColor,
+    required this.tierName,
+  });
+}
+
+/// Pure function — no state, fully testable.
+/// [pct] is the raw ratio (0.0 – 1.0+), NOT a percentage.
+_BudgetStatus _getBudgetStatus(double pct) {
+  if (pct <= 0.30) {
+    return const _BudgetStatus(
+      label: 'Safe-to-Spend',
+      tierColor: Color(0xFF2ECC71),
+      bgColor: Color(0xFFF0FDF4),
+      tierName: 'Optimized',
+    );
+  } else if (pct <= 0.50) {
+    return const _BudgetStatus(
+      label: 'Watch-Your-Spend',
+      tierColor: Color(0xFFE67E22),
+      bgColor: Color(0xFFFFF8F0),
+      tierName: 'Mindful',
+    );
+  } else {
+    return const _BudgetStatus(
+      label: 'Limit-Your-Spend',
+      tierColor: Color(0xFFE74C3C),
+      bgColor: Color(0xFFFFF0F0),
+      tierName: 'Critical',
+    );
+  }
+}
+
 class InsightsScreen extends StatelessWidget {
   const InsightsScreen({super.key});
 
@@ -268,21 +313,17 @@ class InsightsScreen extends StatelessWidget {
                               AffordabilityEngine.getPaidInCycle(installments.toList(), cycle);
                           final double totalCommitted = owed + paid;
                           final double income = user.monthlyIncome;
-                          // Available cash = income minus everything committed this cycle
                           final double available =
                               AffordabilityEngine.calculateSafeToSpend(
                                   installments.toList(), income, user.salaryDay);
                           final double percentage =
                               income > 0 ? (totalCommitted / income) : 0;
 
-                          Color barColor = Colors.green;
-                          if (percentage > 0.8) {
-                            barColor = Colors.red;
-                          } else if (percentage > 0.5) {
-                            barColor = Colors.orange;
-                          }
+                          // ── Tier evaluation ─────────────────────────────
+                          final _BudgetStatus status = _getBudgetStatus(percentage);
+                          final Color barColor = status.tierColor;
 
-                          var format = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
+                          final format = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,19 +348,27 @@ class InsightsScreen extends StatelessWidget {
                                 ],
                               ),
                               const SizedBox(height: 24),
-                              LinearProgressIndicator(
-                                value: percentage.clamp(0.0, 1.0),
-                                backgroundColor: Colors.grey[200],
-                                valueColor: AlwaysStoppedAnimation<Color>(barColor),
-                                minHeight: 8,
+                              ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: percentage.clamp(0.0, 1.0),
+                                  backgroundColor: Colors.grey[200],
+                                  valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                                  minHeight: 8,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('${(percentage * 100).toStringAsFixed(0)}% Consumed', style: TextStyle(color: barColor, fontWeight: FontWeight.bold, fontSize: 12)),
-                                  Text('${format.format(totalCommitted)} Committed', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                  Text(
+                                    '${status.tierName} · ${(percentage * 100).toStringAsFixed(0)}% Consumed',
+                                    style: TextStyle(color: barColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                  Text(
+                                    '${format.format(totalCommitted)} Committed',
+                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                  ),
                                 ],
                               )
                             ],
@@ -574,34 +623,40 @@ class InsightsScreen extends StatelessWidget {
         ? ((owed + paid) / user.monthlyIncome) * 100
         : 0;
 
-    final bool isSafe = safeToSpend >= 0;
-    final Color cardBg =
-        isSafe ? const Color(0xFFF0FAF0) : const Color(0xFFFFF0F0);
-    final Color accentColor =
-        isSafe ? Colors.green[700]! : Colors.red[700]!;
-    final IconData icon =
-        isSafe ? Icons.account_balance_wallet_outlined : Icons.warning_amber_rounded;
+    // ── Tier evaluation (drives both color and copywriting) ────────────────
+    final double pct = user.monthlyIncome > 0
+        ? (owed + paid) / user.monthlyIncome
+        : 0.0;
+    final _BudgetStatus status = _getBudgetStatus(pct);
+
+    // Emergency override: if safeToSpend goes negative, escalate to critical
+    final bool isOverBudget = safeToSpend < 0;
+    final Color accentColor = isOverBudget ? const Color(0xFFE74C3C) : status.tierColor;
+    final Color cardBg      = isOverBudget ? const Color(0xFFFFF0F0) : status.bgColor;
+    final IconData icon     = isOverBudget
+        ? Icons.warning_amber_rounded
+        : Icons.account_balance_wallet_outlined;
 
     final String cycleLabel =
         '${DateFormat.MMMd().format(cycle.start)} – ${DateFormat.MMMd().format(cycle.end)}';
 
-    String headline;
-    String detail;
+    final String headline;
+    final String detail;
 
-    if (isSafe) {
-      headline =
-          '💳 Safe-to-Spend: ${format.format(safeToSpend)} remaining this cycle';
-      detail =
-          'Cycle: $cycleLabel\n'
-          '${format.format(owed)} still owed  •  ${format.format(paid)} already paid\n'
-          'That\'s ${usedPct.toStringAsFixed(0)}% of your income committed to installments.';
-    } else {
+    if (isOverBudget) {
       headline =
           '🚨 Over Budget by ${format.format(safeToSpend.abs())} this cycle!';
       detail =
           'Cycle: $cycleLabel\n'
           '${format.format(owed)} still owed  •  ${format.format(paid)} already paid\n'
           'Your installment obligations exceed your income for this cycle. Avoid new purchases.';
+    } else {
+      headline =
+          '💳 ${status.label}: ${format.format(safeToSpend)} remaining this cycle';
+      detail =
+          'Cycle: $cycleLabel  ·  ${status.tierName}\n'
+          '${format.format(owed)} still owed  •  ${format.format(paid)} already paid\n'
+          '${usedPct.toStringAsFixed(0)}% of your income is committed to installments.';
     }
 
     return Container(
