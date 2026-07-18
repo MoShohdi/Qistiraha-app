@@ -73,6 +73,11 @@ class _InstallmentFormViewState extends State<_InstallmentFormView> {
   String _selectedFrequency = 'Monthly';
   double _calculatedMonthly = 0.0;
 
+  bool _isLegacy = false;
+  bool _isLate = false;
+  final _paidPeriodsController = TextEditingController();
+  final _missedPeriodsController = TextEditingController();
+
   static const List<String> _everydayCategories = [
     'Electronics',
     'Home Appliances',
@@ -129,7 +134,7 @@ class _InstallmentFormViewState extends State<_InstallmentFormView> {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: TimeService.now(),
-      firstDate: TimeService.now(),
+      firstDate: DateTime(2000),
       lastDate: DateTime(2101),
     );
     if (picked != null && picked != _selectedDate) {
@@ -143,6 +148,18 @@ class _InstallmentFormViewState extends State<_InstallmentFormView> {
   void _saveInstallment() async {
     if (_formKey.currentState!.validate() && _selectedDate != null) {
       try {
+        int mMultiplier = 1;
+        if (widget.isLongTerm) {
+          switch (_selectedFrequency) {
+            case 'Quarterly': mMultiplier = 3; break;
+            case 'Semi-Annually': mMultiplier = 6; break;
+            case 'Annually': mMultiplier = 12; break;
+          }
+        }
+        
+        int paidPeriods = int.tryParse(_paidPeriodsController.text) ?? 0;
+        int calculatedPaidMonths = _isLegacy ? (paidPeriods * mMultiplier) : 0;
+
         final newInstallment = await _controller.saveInstallment(
           storeName: _storeNameController.text,
           itemDescription: _itemDescController.text,
@@ -155,6 +172,7 @@ class _InstallmentFormViewState extends State<_InstallmentFormView> {
           category: _selectedCategory ?? 'Other',
           isLongTerm: widget.isLongTerm,
           paymentFrequency: widget.isLongTerm ? _selectedFrequency : 'Monthly',
+          paidMonths: calculatedPaidMonths,
         );
 
         if (mounted) {
@@ -211,6 +229,8 @@ class _InstallmentFormViewState extends State<_InstallmentFormView> {
     _downPaymentController.dispose();
     _interestRateController.dispose();
     _dueDateController.dispose();
+    _paidPeriodsController.dispose();
+    _missedPeriodsController.dispose();
     super.dispose();
   }
 
@@ -341,13 +361,43 @@ class _InstallmentFormViewState extends State<_InstallmentFormView> {
                   ),
                   const SizedBox(height: 16),
                   
-                  _buildLabel('First Payment Due Date'),
+                  _buildLabel(_isLate ? 'Oldest Missed Due Date' : 'Next Due Date'),
                   GestureDetector(
                     onTap: () => _selectDate(context),
                     child: AbsorbPointer(
                       child: _buildTextField(_dueDateController, 'dd/mm/yyyy', suffixIcon: Icons.calendar_today),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  
+                  SwitchListTile(
+                    title: const Text('I have already started paying this off', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    contentPadding: EdgeInsets.zero,
+                    activeColor: Colors.black,
+                    value: _isLegacy,
+                    onChanged: (val) => setState(() => _isLegacy = val),
+                  ),
+                  
+                  if (_isLegacy) ...[
+                    const SizedBox(height: 8),
+                    _buildLabel('How many payments have you already made?'),
+                    _buildTextField(_paidPeriodsController, 'e.g., 10', keyboardType: TextInputType.number),
+                    const SizedBox(height: 16),
+                    
+                    SwitchListTile(
+                      title: const Text('I am currently behind on payments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: Colors.red,
+                      value: _isLate,
+                      onChanged: (val) => setState(() => _isLate = val),
+                    ),
+                    
+                    if (_isLate) ...[
+                      const SizedBox(height: 8),
+                      _buildLabel('How many payments are you late on?'),
+                      _buildTextField(_missedPeriodsController, 'e.g., 2', keyboardType: TextInputType.number),
+                    ],
+                  ],
                 ],
               ),
             ),

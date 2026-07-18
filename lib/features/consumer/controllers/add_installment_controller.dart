@@ -83,6 +83,7 @@ class AddInstallmentController {
     required String category,
     required bool isLongTerm,
     required String paymentFrequency,
+    int paidMonths = 0,
   }) async {
     final userBox = HiveService.getUserBox();
     if (userBox.isEmpty) {
@@ -98,7 +99,7 @@ class AddInstallmentController {
       itemDescription: itemDescription,
       dueDate: dueDate,
       totalMonths: totalMonths,
-      paidMonths: 0,
+      paidMonths: paidMonths,
       status: InstallmentStatus.active.raw,
       monthlyPayment: monthlyPayment,
       downPayment: downPayment,
