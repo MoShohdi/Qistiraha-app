@@ -24,7 +24,20 @@ class _AddInstallmentScreenState extends State<AddInstallmentScreen> {
   final _dueDateController = TextEditingController();
 
   DateTime? _selectedDate;
+  String? _selectedCategory;
   double _calculatedMonthly = 0.0;
+
+  static const List<String> _categories = [
+    'Electronics',
+    'Home Appliances',
+    'Furniture',
+    'Fashion',
+    'Education',
+    'Medical & Clinics',
+    'Automotive',
+    'Travel',
+    'Other',
+  ];
 
   @override
   void initState() {
@@ -78,7 +91,7 @@ class _AddInstallmentScreenState extends State<AddInstallmentScreen> {
           dueDate: _selectedDate!,
           downPayment: double.tryParse(_downPaymentController.text) ?? 0.0,
           interestRate: double.tryParse(_interestRateController.text) ?? 0.0,
-          category: 'Other',
+          category: _selectedCategory ?? 'Other',
         );
 
         if (mounted) {
@@ -223,6 +236,7 @@ class _AddInstallmentScreenState extends State<AddInstallmentScreen> {
                     const SizedBox(height: 16),
                     
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Expanded(
                           child: Column(
@@ -244,6 +258,35 @@ class _AddInstallmentScreenState extends State<AddInstallmentScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    _buildLabel('Product Category'),
+                    DropdownButtonFormField<String>(
+                      value: _selectedCategory,
+                      hint: Text('Select a category', style: TextStyle(color: Colors.grey[400])),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFFF8F9FA),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Colors.blueAccent),
+                        ),
+                      ),
+                      items: _categories
+                          .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                          .toList(),
+                      onChanged: (val) => setState(() => _selectedCategory = val),
+                      validator: (val) => val == null ? 'Please select a category' : null,
                     ),
                     const SizedBox(height: 16),
                     
