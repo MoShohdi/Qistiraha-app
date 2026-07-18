@@ -68,7 +68,37 @@ class MockDataService {
       category: 'Fashion',
     );
 
-    await installmentBox.addAll([inst1, inst2, inst3, inst4]);
+    var inst5 = Installment(
+      id: uuid.v4(),
+      amount: 600000.0,
+      merchantName: 'Toyota',
+      itemDescription: 'Corolla 2024',
+      dueDate: TimeService.now().add(const Duration(days: 15)),
+      totalMonths: 60,
+      paidMonths: 5,
+      status: 'Active',
+      monthlyPayment: 10000.0,
+      category: 'Automotive',
+      isLongTerm: true,
+      paymentFrequency: 'Monthly',
+    );
+
+    var inst6 = Installment(
+      id: uuid.v4(),
+      amount: 3000000.0,
+      merchantName: 'Palm Hills',
+      itemDescription: 'Villa Down Payment',
+      dueDate: TimeService.now().add(const Duration(days: 20)),
+      totalMonths: 60, // 5 years
+      paidMonths: 12, // 1 year
+      status: 'Active',
+      monthlyPayment: 37500.0, // Per quarter
+      category: 'Real Estate',
+      isLongTerm: true,
+      paymentFrequency: 'Quarterly',
+    );
+
+    await installmentBox.addAll([inst1, inst2, inst3, inst4, inst5, inst6]);
 
     // Create user
     var user = UserAccount(
@@ -80,7 +110,7 @@ class MockDataService {
     await userBox.add(user);
 
     // Link installments to user
-    user.installments = HiveList(installmentBox, objects: [inst1, inst2, inst3, inst4]);
+    user.installments = HiveList(installmentBox, objects: [inst1, inst2, inst3, inst4, inst5, inst6]);
     await user.save();
   }
 }

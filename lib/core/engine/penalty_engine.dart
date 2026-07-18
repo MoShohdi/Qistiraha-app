@@ -93,6 +93,41 @@ class PenaltyEngine {
   }
 
   // ---------------------------------------------------------------------------
+  // Missed periods helpers
+  // ---------------------------------------------------------------------------
+
+  static int calculateUncappedMissedPeriods(Installment inst) {
+    if (inst.statusEnum == InstallmentStatus.paid) return 0;
+
+    DateTime now = TimeService.now();
+    DateTime justDate = DateTime(now.year, now.month, now.day);
+    DateTime dueDateJustDate = DateTime(
+      inst.dueDate.year,
+      inst.dueDate.month,
+      inst.dueDate.day,
+    );
+
+    int daysLate = justDate.difference(dueDateJustDate).inDays;
+    if (daysLate <= 0) return 0;
+
+    int calculatedArrears = calculateCalendarMonthsPassed(dueDateJustDate, justDate);
+    return (calculatedArrears ~/ inst.monthsPerPayment) + 1;
+  }
+
+  static int calculateMissedPeriods(Installment inst) {
+    int calculatedPeriods = calculateUncappedMissedPeriods(inst);
+    int remainingPeriods = inst.totalPayments - inst.paidPayments;
+    return min(calculatedPeriods, remainingPeriods);
+  }
+
+  static int calculateActualPeriodsToPay(Installment inst) {
+    if (inst.statusEnum == InstallmentStatus.paid) return 0;
+    if (inst.lenderEnum == LenderType.standard) return 1;
+    int missed = calculateMissedPeriods(inst);
+    return missed <= 0 ? 1 : missed;
+  }
+
+  // ---------------------------------------------------------------------------
   // Main entry point — delegates to the correct LateFeePolicy
   // ---------------------------------------------------------------------------
 
