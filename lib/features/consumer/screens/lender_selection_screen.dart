@@ -7,11 +7,12 @@ class LenderSelectionScreen extends StatelessWidget {
   const LenderSelectionScreen({super.key, required this.installment});
 
   void _selectLender(BuildContext context, String lenderName) async {
-    installment.lender = lenderName;
+    installment.provider = lenderName;
+    installment.lender = lenderName; // keep for backward compatibility
     await installment.save();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Rule for $lenderName applied to installment!')),
+        SnackBar(content: Text('Provider $lenderName applied to installment!')),
       );
       Navigator.pop(context);
     }
@@ -19,13 +20,35 @@ class LenderSelectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lenders = [
-      {'name': 'Valu', 'desc': '10% Max on unpaid monthly installment if 5 days late.'},
-      {'name': 'SYMPL', 'desc': '25 EGP flat per late payment.'},
-      {'name': 'Shahry', 'desc': '7-15% on due installment if 5 days late.'},
-      {'name': 'MiniCash', 'desc': '6% (Min 60 LE) starts 5 days after due date.'},
-      {'name': 'CIB', 'desc': '150 EGP flat + 3.99% monthly interest.'},
-      {'name': 'Other', 'desc': 'Custom or currently unsupported lender.'},
+    final List<String> supportedLenders = [
+      'Valu',
+      'AMAN Holding',
+      'Contact Financial Holding',
+      'MNT-Halan',
+      'Souhoola',
+      'Premium Card',
+      'Shahry',
+      'Forsa',
+      'Sympl',
+      'Blnk',
+      'Fawry',
+      'one bank',
+      'National Bank of Egypt (NBE)',
+      'Banque Misr',
+      'Commercial International Bank (CIB)',
+      'QNB Alahli',
+      'Banque du Caire',
+      'Arab African International Bank (AAIB)',
+      'HSBC Egypt',
+      'AlexBank',
+      'Credit Agricole Egypt',
+      'Abu Dhabi Islamic Bank (ADIB) Egypt',
+      'Emirates NBD Egypt',
+      'EG Bank',
+      'Mashreq Bank Egypt',
+      'saib Bank',
+      'Housing and Development Bank (HDB)',
+      'Other'
     ];
 
     return Scaffold(
@@ -34,13 +57,13 @@ class LenderSelectionScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
-        title: const Text('Select Lender Rule', style: TextStyle(color: Colors.black)),
+        title: const Text('Select Lender', style: TextStyle(color: Colors.black)),
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: lenders.length,
+        itemCount: supportedLenders.length,
         itemBuilder: (context, index) {
-          var lender = lenders[index];
+          var lender = supportedLenders[index];
           return Card(
             elevation: 0,
             margin: const EdgeInsets.only(bottom: 12),
@@ -50,13 +73,13 @@ class LenderSelectionScreen extends StatelessWidget {
             ),
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              title: Text(lender['name']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              title: Text(lender, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 8.0),
-                child: Text(lender['desc']!, style: TextStyle(color: Colors.grey[700])),
+                child: Text('Please contact your lender for late fees details.', style: TextStyle(color: Colors.grey[700])),
               ),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () => _selectLender(context, lender['name']!),
+              onTap: () => _selectLender(context, lender),
             ),
           );
         },

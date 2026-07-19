@@ -429,8 +429,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     
     String amountStr = currencyFormatter.format(displayAmountDue);
-    String formattedDate = DateFormat.MMMd().format(nextInst.dueDate);
-    String itemDetails = "${nextInst.lender} (${nextInst.itemDescription})";
+    String itemDetails = "${nextInst.provider} (${nextInst.itemDescription})";
 
     String warningText = '';
     Color bgColor = Colors.transparent;
@@ -443,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
       textColor = Colors.red[800]!;
       iconData = Icons.error_outline;
     } else if (daysLate > 0) {
-      warningText = '🚨 Overdue since $formattedDate on $itemDetails! Pay $amountStr';
+      warningText = '🚨 Payment is late. Please contact your lender for late fees details.';
       bgColor = const Color(0xFFFFF0F0);
       textColor = Colors.red[800]!;
       iconData = Icons.warning_amber_rounded;
@@ -878,8 +877,8 @@ class _HomeScreenState extends State<HomeScreen> {
         int daysToDue = dueDateJustDate.difference(justDate).inDays;
 
         bool isOverdue = inst.statusEnum != InstallmentStatus.paid && daysToDue < 0;
+
         PenaltyResult penaltyResult = PenaltyEngine.calculateLateFees(inst);
-        double lateFee = penaltyResult.lateFee;
         bool isAccelerated = penaltyResult.isAccelerated;
         int remainingPeriods = inst.totalPayments - inst.paidPayments;
         
@@ -895,9 +894,9 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         if (isAccelerated) {
-          displayAmountDue = (remainingPeriods * inst.monthlyPayment) + lateFee;
+          displayAmountDue = (remainingPeriods * inst.monthlyPayment);
         } else {
-          displayAmountDue = (inst.monthlyPayment * periodsOwed) + lateFee;
+          displayAmountDue = (inst.monthlyPayment * periodsOwed);
         }
 
         // --- Button: immediate transaction cost (1 period for informal, arrears for commercial) ---
@@ -905,10 +904,10 @@ class _HomeScreenState extends State<HomeScreen> {
         if (inst.paidPayments + regularPeriodsToPay > inst.totalPayments) {
           regularPeriodsToPay = inst.totalPayments - inst.paidPayments;
         }
-        double regularTransactionCost = (inst.monthlyPayment * regularPeriodsToPay) + lateFee;
+        double regularTransactionCost = (inst.monthlyPayment * regularPeriodsToPay);
 
         int fullPeriodsToPay = inst.totalPayments - inst.paidPayments;
-        double fullTransactionCost = (inst.monthlyPayment * fullPeriodsToPay) + lateFee;
+        double fullTransactionCost = (inst.monthlyPayment * fullPeriodsToPay);
 
         int visualRedSegments = 0;
         if (isOverdue) {
@@ -965,7 +964,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               inst.merchantName,
@@ -974,16 +974,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            if (inst.lenderEnum != LenderType.standard)
+                            if (inst.provider != 'Other / Custom')
                               Container(
-                                margin: const EdgeInsets.only(left: 8),
+                                margin: const EdgeInsets.only(top: 4),
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.blue[50],
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  '${inst.lender} Rule',
+                                  '${inst.provider} Details',
                                   style: TextStyle(color: Colors.blue[800], fontSize: 10, fontWeight: FontWeight.bold),
                                 ),
                               ),
@@ -1002,41 +1002,28 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         const SizedBox(height: 4),
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (isOverdue)
                               const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
                             if (isOverdue)
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                dueText,
+                                isOverdue 
+                                  ? 'Overdue by ${-daysToDue} days • Please contact your lender for late fees details.'
+                                  : dueText,
                                 style: TextStyle(
-                                  color: isOverdue ? Colors.red : Colors.grey[700],
+                                  color: isOverdue ? Colors.red[700] : Colors.grey[700],
                                   fontSize: 13,
                                   fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
                                 ),
-                                overflow: TextOverflow.ellipsis,
+                                softWrap: isOverdue,
+                                overflow: isOverdue ? TextOverflow.visible : TextOverflow.ellipsis,
                               ),
                             ),
                           ],
                         ),
-                        if (lateFee > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.money_off, color: Colors.redAccent, size: 14),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    '+ EGP ${lateFee.toStringAsFixed(0)} Late Fee (${inst.lender})',
-                                    style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -1046,18 +1033,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        if (lateFee > 0 && !isAccelerated)
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              currencyFormatter.format(inst.monthlyPayment * PenaltyEngine.calculateMissedMonths(inst)),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey,
-                                decoration: TextDecoration.lineThrough,
-                              ),
-                            ),
-                          ),
+                        // Crossed out old price is removed since there are no calculated late fees.
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
@@ -1065,7 +1041,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: lateFee > 0 || isOverdue ? Colors.red : Colors.black,
+                              color: isOverdue ? Colors.red : Colors.black,
                             ),
                           ),
                         ),
@@ -1138,7 +1114,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 (() {
                   Future<void> pay(int periodsToPay) async {
                     if (inst.paidPayments < inst.totalPayments) {
-                      double evenlyDistributedPenalty = lateFee / periodsToPay;
+                      double evenlyDistributedPenalty = 0.0;
 
                       for (int i = 0; i < periodsToPay; i++) {
                         inst.pastPayments = List.from(inst.pastPayments)..add(inst.monthlyPayment + evenlyDistributedPenalty);

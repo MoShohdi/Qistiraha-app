@@ -59,6 +59,9 @@ class Installment extends HiveObject {
   @HiveField(17, defaultValue: 'Monthly')
   String paymentFrequency;
 
+  @HiveField(18, defaultValue: 'Other / Custom')
+  String provider;
+
   Installment({
     required this.id,
     required this.amount,
@@ -78,6 +81,7 @@ class Installment extends HiveObject {
     this.lastPaidAt,
     this.isLongTerm = false,
     this.paymentFrequency = 'Monthly',
+    this.provider = 'Other / Custom',
   });
 
   // ---------------------------------------------------------------------------
@@ -107,3 +111,37 @@ class Installment extends HiveObject {
   int get totalPayments => totalMonths ~/ monthsPerPayment;
   int get paidPayments => paidMonths ~/ monthsPerPayment;
 }
+
+const List<String> kEgyptianProviders = [
+  // Fintech & BNPL
+  'Valu',
+  'AMAN Holding',
+  'Contact Financial Holding',
+  'MNT-Halan',
+  'Souhoola',
+  'Premium Card',
+  'Shahry',
+  'Forsa',
+  'Sympl',
+  'Blnk',
+  'Fawry',
+  'OneBank',
+  // Banks
+  'National Bank of Egypt (NBE)',
+  'Banque Misr',
+  'Commercial International Bank (CIB)',
+  'QNB Alahli',
+  'Banque du Caire',
+  'Arab African International Bank (AAIB)',
+  'HSBC Egypt',
+  'AlexBank',
+  'Credit Agricole Egypt',
+  'Abu Dhabi Islamic Bank (ADIB) Egypt',
+  'Emirates NBD Egypt',
+  'EG Bank',
+  'Mashreq Bank Egypt',
+  'saib Bank',
+  'Housing and Development Bank (HDB)',
+  // Fallback
+  'Other / Custom'
+];

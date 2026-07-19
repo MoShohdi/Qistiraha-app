@@ -2,12 +2,6 @@ import 'dart:math';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/core/services/time_service.dart';
-import 'policies/late_fee_policy.dart';
-import 'policies/valu_policy.dart';
-import 'policies/shahry_tru_policy.dart';
-import 'policies/mini_cash_btech_policy.dart';
-import 'policies/sympl_policy.dart';
-import 'policies/standard_policy.dart';
 
 class PenaltyResult {
   final double lateFee;
@@ -18,22 +12,8 @@ class PenaltyResult {
 
 class PenaltyEngine {
   // ---------------------------------------------------------------------------
-  // Strategy map: lender string → policy instance (singletons, stateless)
+  // Strategy map: provider string → policy instance (singletons, stateless)
   // ---------------------------------------------------------------------------
-  static const LateFeePolicy _standardPolicy = StandardPolicy();
-
-  static const Map<String, LateFeePolicy> _policyMap = {
-    'Valu': ValuPolicy(),
-    'Shahry': ShahryTruPolicy(),
-    'TRU': ShahryTruPolicy(),
-    'MiniCash': MiniCashBtechPolicy(),
-    'B.Tech': MiniCashBtechPolicy(),
-    'SYMPL': SymplPolicy(),
-  };
-
-  static LateFeePolicy _policyFor(Installment inst) {
-    return _policyMap[inst.lender] ?? _standardPolicy;
-  }
 
   // ---------------------------------------------------------------------------
   // Calendar math helpers
@@ -87,7 +67,7 @@ class PenaltyEngine {
   /// Commercial/strict rules retain multi-month arrears bundling.
   static int calculateActualMonthsToPay(Installment inst) {
     if (inst.statusEnum == InstallmentStatus.paid) return 0;
-    if (inst.lenderEnum == LenderType.standard) return 1;
+    if (inst.provider == 'Other / Custom') return 1;
     int missed = calculateMissedMonths(inst);
     return missed <= 0 ? 1 : missed;
   }
@@ -122,7 +102,7 @@ class PenaltyEngine {
 
   static int calculateActualPeriodsToPay(Installment inst) {
     if (inst.statusEnum == InstallmentStatus.paid) return 0;
-    if (inst.lenderEnum == LenderType.standard) return 1;
+    if (inst.provider == 'Other / Custom') return 1;
     int missed = calculateMissedPeriods(inst);
     return missed <= 0 ? 1 : missed;
   }
@@ -150,15 +130,11 @@ class PenaltyEngine {
     int uncappedMissedMonths = calculateUncappedMissedMonths(inst);
     if (uncappedMissedMonths < 1) uncappedMissedMonths = 1;
 
-    int remainingInstallments = inst.totalMonths - inst.paidMonths;
-
-    final policy = _policyFor(inst);
-    return policy.calculatePenalty(
-      inst,
-      now,
-      daysLate,
-      uncappedMissedMonths,
-      remainingInstallments,
+    // Unified logic: we do not calculate any monetary late fee for any provider.
+    // The UI handles dynamic strings. We only flag acceleration if 3+ months missed.
+    return PenaltyResult(
+      lateFee: 0.0,
+      isAccelerated: uncappedMissedMonths >= 3,
     );
   }
 }
