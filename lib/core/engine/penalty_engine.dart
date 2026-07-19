@@ -2,8 +2,6 @@ import 'dart:math';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/core/services/time_service.dart';
-import 'policies/sympl_policy.dart';
-import 'policies/standard_policy.dart';
 
 class PenaltyResult {
   final double lateFee;
@@ -132,15 +130,11 @@ class PenaltyEngine {
     int uncappedMissedMonths = calculateUncappedMissedMonths(inst);
     if (uncappedMissedMonths < 1) uncappedMissedMonths = 1;
 
-    int remainingInstallments = inst.totalMonths - inst.paidMonths;
-
-    if (inst.provider == 'Sympl') {
-      return const SymplPolicy().calculatePenalty(inst, now, daysLate, uncappedMissedMonths, remainingInstallments);
-    } else if (inst.provider == 'Other / Custom') {
-      return const StandardPolicy().calculatePenalty(inst, now, daysLate, uncappedMissedMonths, remainingInstallments);
-    }
-
-    // For dynamic lenders, don't guess the monetary penalty amount
-    return PenaltyResult(lateFee: 0.0, isAccelerated: false);
+    // Unified logic: we do not calculate any monetary late fee for any provider.
+    // The UI handles dynamic strings. We only flag acceleration if 3+ months missed.
+    return PenaltyResult(
+      lateFee: 0.0,
+      isAccelerated: uncappedMissedMonths >= 3,
+    );
   }
 }
