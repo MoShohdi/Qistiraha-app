@@ -430,12 +430,14 @@ class _HomeScreenState extends State<HomeScreen> {
     
     String amountStr = currencyFormatter.format(displayAmountDue);
     String formattedDate = DateFormat.MMMd().format(nextInst.dueDate);
-    String itemDetails = "${nextInst.lender} (${nextInst.itemDescription})";
+    String itemDetails = "${nextInst.provider} (${nextInst.itemDescription})";
 
     String warningText = '';
     Color bgColor = Colors.transparent;
     Color textColor = Colors.transparent;
     IconData iconData = Icons.warning;
+
+    bool isCustomOrSympl = nextInst.provider == 'Sympl' || nextInst.provider == 'Other / Custom';
 
     if (pr.isAccelerated) {
       warningText = '🚨 DEFAULT: Entire balance of $amountStr is due for $itemDetails!';
@@ -443,7 +445,11 @@ class _HomeScreenState extends State<HomeScreen> {
       textColor = Colors.red[800]!;
       iconData = Icons.error_outline;
     } else if (daysLate > 0) {
-      warningText = '🚨 Overdue since $formattedDate on $itemDetails! Pay $amountStr';
+      if (!isCustomOrSympl) {
+        warningText = '🚨 Payment is late. Check with ${nextInst.provider} for exact penalty fees.';
+      } else {
+        warningText = '🚨 Overdue since $formattedDate on $itemDetails! Pay $amountStr';
+      }
       bgColor = const Color(0xFFFFF0F0);
       textColor = Colors.red[800]!;
       iconData = Icons.warning_amber_rounded;
@@ -965,7 +971,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               inst.merchantName,
@@ -974,16 +981,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            if (inst.lenderEnum != LenderType.standard)
+                            if (inst.provider != 'Other / Custom')
                               Container(
-                                margin: const EdgeInsets.only(left: 8),
+                                margin: const EdgeInsets.only(top: 4),
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.blue[50],
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  '${inst.lender} Rule',
+                                  '${inst.provider} Rule',
                                   style: TextStyle(color: Colors.blue[800], fontSize: 10, fontWeight: FontWeight.bold),
                                 ),
                               ),
@@ -1029,7 +1036,24 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    '+ EGP ${lateFee.toStringAsFixed(0)} Late Fee (${inst.lender})',
+                                    '+ EGP ${lateFee.toStringAsFixed(0)} Late Fee (${inst.provider})',
+                                    style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (isOverdue && inst.provider != 'Sympl' && inst.provider != 'Other / Custom')
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.warning, color: Colors.redAccent, size: 14),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Contact ${inst.provider} for late fees',
                                     style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
                                     overflow: TextOverflow.ellipsis,
                                   ),

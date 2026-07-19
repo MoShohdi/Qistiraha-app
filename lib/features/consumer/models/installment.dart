@@ -59,6 +59,9 @@ class Installment extends HiveObject {
   @HiveField(17, defaultValue: 'Monthly')
   String paymentFrequency;
 
+  @HiveField(18, defaultValue: 'Other / Custom')
+  String provider;
+
   Installment({
     required this.id,
     required this.amount,
@@ -78,6 +81,7 @@ class Installment extends HiveObject {
     this.lastPaidAt,
     this.isLongTerm = false,
     this.paymentFrequency = 'Monthly',
+    this.provider = 'Other / Custom',
   });
 
   // ---------------------------------------------------------------------------
@@ -107,3 +111,44 @@ class Installment extends HiveObject {
   int get totalPayments => totalMonths ~/ monthsPerPayment;
   int get paidPayments => paidMonths ~/ monthsPerPayment;
 }
+
+const List<String> kEgyptianProviders = [
+  'valU',
+  'Aman (Aman Financial Services)',
+  'Contact Financial Holding',
+  'MNT-Halan',
+  'B. TECH (Minicash)',
+  'Premium Card',
+  'Souhoola',
+  'Sympl',
+  'Shahry',
+  'Forsa',
+  'Blnk',
+  'ADI Consumer Finance (Takka)',
+  'Fawry Microfinance',
+  'Khazna',
+  'NowPay',
+  'Money Fellows',
+  'Kashat',
+  'Cassbana',
+  'U Consumer Finance',
+  'Bokra',
+  'Tamweely Microfinance',
+  'Reefy Microfinance',
+  'Vitas Egypt',
+  'Commercial International Bank (CIB)',
+  'National Bank of Egypt (NBE)',
+  'Banque Misr',
+  'QNB (Qatar National Bank Egypt)',
+  'HSBC Egypt',
+  'ALEXBANK (Bank of Alexandria)',
+  'Abu Dhabi Islamic Bank (ADIB Egypt)',
+  'Credit Agricole Egypt',
+  'Housing & Development Bank (HDB)',
+  'Emirates NBD Egypt',
+  'Mashreq Bank Egypt',
+  'FABMISR (First Abu Dhabi Bank Misr)',
+  'Banque du Caire',
+  'Egyptian Gulf Bank (EG Bank)',
+  'Other / Custom'
+];

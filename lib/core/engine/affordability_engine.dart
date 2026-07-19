@@ -80,6 +80,8 @@ class AffordabilityEngine {
       drain /= 3;
     } else if (inst.paymentFrequency == 'Annually') {
       drain /= 12;
+    } else if (inst.paymentFrequency == 'Semi-Annually') {
+      drain /= 6;
     }
     return drain;
   }

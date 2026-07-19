@@ -27,6 +27,7 @@ class MockDataService {
       status: 'Active',
       monthlyPayment: 100.0,
       category: 'Electronics',
+      provider: 'B. TECH (Minicash)',
     );
 
     var inst2 = Installment(
@@ -40,6 +41,7 @@ class MockDataService {
       status: 'Active',
       monthlyPayment: 100.0,
       category: 'Home Essentials',
+      provider: 'Contact Financial Holding',
     );
 
     var inst3 = Installment(
@@ -53,6 +55,7 @@ class MockDataService {
       status: 'Active',
       monthlyPayment: 150.0,
       category: 'Fashion',
+      provider: 'valU',
     );
 
     var inst4 = Installment(
@@ -66,6 +69,7 @@ class MockDataService {
       status: 'Overdue',
       monthlyPayment: 400.0,
       category: 'Fashion',
+      provider: 'Sympl',
     );
 
     var inst5 = Installment(
@@ -81,6 +85,7 @@ class MockDataService {
       category: 'Automotive',
       isLongTerm: true,
       paymentFrequency: 'Monthly',
+      provider: 'QNB (Qatar National Bank Egypt)',
     );
 
     var inst6 = Installment(
@@ -96,7 +101,10 @@ class MockDataService {
       category: 'Real Estate',
       isLongTerm: true,
       paymentFrequency: 'Quarterly',
+      provider: 'Housing & Development Bank (HDB)',
     );
+
+
 
     await installmentBox.addAll([inst1, inst2, inst3, inst4, inst5, inst6]);
 

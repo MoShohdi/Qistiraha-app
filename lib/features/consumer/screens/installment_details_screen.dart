@@ -521,7 +521,21 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   const Icon(Icons.money_off, color: Colors.redAccent, size: 14),
                   const SizedBox(width: 4),
                   Text(
-                    '+ EGP ${lateFee.toStringAsFixed(0)} Late Fee (${widget.installment.lender})',
+                    '+ EGP ${lateFee.toStringAsFixed(0)} Late Fee (${widget.installment.provider})',
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          if (widget.installment.statusEnum == InstallmentStatus.overdue && widget.installment.provider != 'Sympl' && widget.installment.provider != 'Other / Custom')
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning, color: Colors.redAccent, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Contact ${widget.installment.provider} for late fees',
                     style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                 ],

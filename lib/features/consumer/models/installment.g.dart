@@ -36,13 +36,14 @@ class InstallmentAdapter extends TypeAdapter<Installment> {
       lastPaidAt: fields[15] as DateTime?,
       isLongTerm: fields[16] == null ? false : fields[16] as bool,
       paymentFrequency: fields[17] == null ? 'Monthly' : fields[17] as String,
+      provider: fields[18] == null ? 'Other / Custom' : fields[18] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, Installment obj) {
     writer
-      ..writeByte(18)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -78,7 +79,9 @@ class InstallmentAdapter extends TypeAdapter<Installment> {
       ..writeByte(16)
       ..write(obj.isLongTerm)
       ..writeByte(17)
-      ..write(obj.paymentFrequency);
+      ..write(obj.paymentFrequency)
+      ..writeByte(18)
+      ..write(obj.provider);
   }
 
   @override
