@@ -239,20 +239,26 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               _buildEarlyPayoffCalculator(),
               const SizedBox(height: 24),
             ],
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: _confirmDelete,
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.red,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text(
-                  'Delete Installment',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+            // A merchant-linked contract belongs to the merchant's ledger
+            // too — only the merchant can cancel it (from their own
+            // Installment Details screen). The consumer may still delete
+            // installments they tracked manually themselves.
+            if (widget.installment.merchantId == null ||
+                widget.installment.merchantId!.isEmpty)
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: _confirmDelete,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: const Text(
+                    'Delete Installment',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
-            ),
             const SizedBox(height: 32),
           ],
         ),

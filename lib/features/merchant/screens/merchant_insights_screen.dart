@@ -100,6 +100,28 @@ class MerchantInsightsScreen extends StatelessWidget {
     return items.take(6).toList();
   }
 
+  /// Each installment contributes at most one row here — its most recent
+  /// payment — since the data model only tracks a single [lastPaidAt] per
+  /// plan rather than a timestamped ledger of every individual payment.
+  List<_ActivityEntry> _recentActivity() {
+    final entries = <_ActivityEntry>[];
+    for (final inst in plans) {
+      if (inst.lastPaidAt == null || inst.paidPayments <= 0) continue;
+      final amount = inst.pastPayments.isNotEmpty
+          ? inst.pastPayments.last
+          : inst.monthlyPayment;
+      entries.add(
+        _ActivityEntry(
+          installment: inst,
+          amountPaid: amount,
+          timestamp: inst.lastPaidAt!,
+        ),
+      );
+    }
+    entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return entries.take(8).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (plans.isEmpty) {
@@ -114,6 +136,7 @@ class MerchantInsightsScreen extends StatelessWidget {
 
     final cashFlow = _projectCashFlow();
     final topItems = _topSellingItems();
+    final recentActivity = _recentActivity();
     final now = TimeService.now();
     final monthLabels = List.generate(
       6,
@@ -208,6 +231,52 @@ class MerchantInsightsScreen extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CardPopIn(
+                id: 'merchant-recent-activity-header',
+                builder: (context, animate) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Recent Activity',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'Latest payments — handy for your own records',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ],
+                ).popInIf(animate, 0),
+              ),
+              const SizedBox(height: 16),
+              if (recentActivity.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'No payments yet.',
+                    style: TextStyle(color: Colors.grey[500]),
+                  ),
+                )
+              else
+                ...recentActivity.map(
+                  (entry) => _ActivityRow(entry: entry, currency: currency),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -218,6 +287,17 @@ class _TopItem {
   int count = 0;
   double revenue = 0.0;
   _TopItem({required this.name});
+}
+
+class _ActivityEntry {
+  final Installment installment;
+  final double amountPaid;
+  final DateTime timestamp;
+  _ActivityEntry({
+    required this.installment,
+    required this.amountPaid,
+    required this.timestamp,
+  });
 }
 
 class _StatCard extends StatelessWidget {
@@ -452,6 +532,91 @@ class _TopItemRow extends StatelessWidget {
                       color: _kBrand,
                       minHeight: 6,
                     ),
+                  ),
+                ],
+              ),
+            ).popInIf(animate, 1),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityRow extends StatelessWidget {
+  final _ActivityEntry entry;
+  final NumberFormat currency;
+  const _ActivityRow({required this.entry, required this.currency});
+
+  String get _timestampLabel {
+    final now = TimeService.now();
+    final ts = entry.timestamp;
+    final isToday =
+        ts.year == now.year && ts.month == now.month && ts.day == now.day;
+    final yesterday = now.subtract(const Duration(days: 1));
+    final isYesterday =
+        ts.year == yesterday.year &&
+        ts.month == yesterday.month &&
+        ts.day == yesterday.day;
+    final timeStr = DateFormat('h:mm a').format(ts);
+    if (isToday) return 'Today, $timeStr';
+    if (isYesterday) return 'Yesterday, $timeStr';
+    return '${DateFormat('dd MMM').format(ts)}, $timeStr';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inst = entry.installment;
+    final name = inst.customerName ?? 'Customer';
+
+    return CardPopIn(
+      id: 'merchant-activity-${inst.id}',
+      builder: (context, animate) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 17,
+              ),
+            ).popInIf(animate, 0),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text.rich(
+                    TextSpan(
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black87,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextSpan(
+                          text:
+                              ' paid ${currency.format(entry.amountPaid)} for ${inst.itemDescription}',
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _timestampLabel,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
                   ),
                 ],
               ),
