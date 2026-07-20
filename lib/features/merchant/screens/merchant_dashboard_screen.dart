@@ -8,7 +8,10 @@ import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
+import 'package:qistiraha/features/merchant/widgets/merchant_plan_row.dart';
+import 'merchant_customer_profile_screen.dart';
 import 'merchant_insights_screen.dart';
+import 'merchant_installment_details_screen.dart';
 import 'merchant_portal_screen.dart';
 
 const _kBrand = Color(0xFF99AFD7);
@@ -183,7 +186,7 @@ class _OverviewTab extends StatelessWidget {
           ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
       children: [
         Row(
           children: [
@@ -310,64 +313,83 @@ class _UpcomingTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isOverdue = installment.statusEnum == InstallmentStatus.overdue;
-    return CardPopIn(
-      id: installment.id,
-      builder: (context, animate) => Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isOverdue
-                ? Colors.red.withValues(alpha: 0.4)
-                : Colors.grey[200]!,
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                MerchantInstallmentDetailsScreen(installment: installment),
           ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    installment.customerName ?? 'Customer',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ).popInIf(animate, 0),
-                  const SizedBox(height: 2),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        installment.itemDescription,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        isOverdue
-                            ? 'Overdue since ${DateFormat('dd MMM').format(installment.dueDate)}'
-                            : 'Due ${DateFormat('dd MMM yyyy').format(installment.dueDate)}',
-                        style: TextStyle(
-                          color: isOverdue ? Colors.red[700] : Colors.grey[500],
-                          fontSize: 12,
-                          fontWeight: isOverdue
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ],
-                  ).popInIf(animate, 1),
-                ],
-              ),
+        );
+      },
+      child: CardPopIn(
+        id: installment.id,
+        builder: (context, animate) => Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isOverdue
+                  ? Colors.red.withValues(alpha: 0.4)
+                  : Colors.grey[200]!,
             ),
-            Text(
-              currency.format(installment.monthlyPayment),
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-            ).popInIf(animate, 0),
-          ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      installment.customerName ?? 'Customer',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ).popInIf(animate, 0),
+                    const SizedBox(height: 2),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          installment.itemDescription,
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          isOverdue
+                              ? 'Overdue since ${DateFormat('dd MMM').format(installment.dueDate)}'
+                              : 'Due ${DateFormat('dd MMM yyyy').format(installment.dueDate)}',
+                          style: TextStyle(
+                            color: isOverdue
+                                ? Colors.red[700]
+                                : Colors.grey[500],
+                            fontSize: 12,
+                            fontWeight: isOverdue
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ).popInIf(animate, 1),
+                  ],
+                ),
+              ),
+              Text(
+                currency.format(installment.monthlyPayment),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ).popInIf(animate, 0),
+            ],
+          ),
         ),
       ),
     );
@@ -439,7 +461,7 @@ class _CustomersTab extends StatelessWidget {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
       itemCount: customers.length,
       itemBuilder: (context, index) {
         final c = customers[index];
@@ -456,61 +478,79 @@ class _CustomersTab extends StatelessWidget {
           healthColor = _kBrand;
         }
 
-        return CardPopIn(
-          id: 'merchant-customer-${c.key}',
-          builder: (context, animate) => Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey[200]!),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: healthColor.withValues(alpha: 0.15),
-                  child: Icon(Icons.person, color: healthColor),
-                ).popInIf(animate, 0),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        c.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${c.plans.length} plan${c.plans.length == 1 ? '' : 's'} • Outstanding ${currency.format(c.outstanding)}',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                      ),
-                    ],
-                  ).popInIf(animate, 1),
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MerchantCustomerProfileScreen(
+                  customerName: c.name,
+                  customerPhone: c.plans.first.customerPhone,
+                  plans: c.plans,
+                  currency: currency,
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+              ),
+            );
+          },
+          child: CardPopIn(
+            id: 'merchant-customer-${c.key}',
+            builder: (context, animate) => Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: healthColor.withValues(alpha: 0.15),
+                    child: Icon(Icons.person, color: healthColor),
+                  ).popInIf(animate, 0),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          c.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${c.plans.length} plan${c.plans.length == 1 ? '' : 's'} • Outstanding ${currency.format(c.outstanding)}',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ).popInIf(animate, 1),
                   ),
-                  decoration: BoxDecoration(
-                    color: healthColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    healthLabel,
-                    style: TextStyle(
-                      color: healthColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
                     ),
-                  ),
-                ).popInIf(animate, 2),
-              ],
+                    decoration: BoxDecoration(
+                      color: healthColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      healthLabel,
+                      style: TextStyle(
+                        color: healthColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ).popInIf(animate, 2),
+                ],
+              ),
             ),
           ),
         );
@@ -576,11 +616,24 @@ class _ActiveInstallmentsTabState extends State<_ActiveInstallmentsTab> {
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final p = filtered[index];
-                    return _PlanRow(installment: p, currency: widget.currency);
+                    return MerchantPlanRow(
+                      installment: p,
+                      currency: widget.currency,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MerchantInstallmentDetailsScreen(
+                              installment: p,
+                            ),
+                          ),
+                        );
+                      },
+                    );
                   },
                 ),
         ),
@@ -605,126 +658,6 @@ class _ActiveInstallmentsTabState extends State<_ActiveInstallmentsTab> {
         side: BorderSide(color: Colors.grey[300]!),
       ),
       onSelected: (_) => setState(() => _filter = value),
-    );
-  }
-}
-
-class _PlanRow extends StatelessWidget {
-  final Installment installment;
-  final NumberFormat currency;
-  const _PlanRow({required this.installment, required this.currency});
-
-  @override
-  Widget build(BuildContext context) {
-    Color statusColor;
-    String statusLabel;
-    switch (installment.statusEnum) {
-      case InstallmentStatus.overdue:
-        statusColor = Colors.red;
-        statusLabel = 'Overdue';
-        break;
-      case InstallmentStatus.paid:
-        statusColor = Colors.green;
-        statusLabel = 'Paid';
-        break;
-      case InstallmentStatus.defaulted:
-        statusColor = Colors.red[900]!;
-        statusLabel = 'Defaulted';
-        break;
-      case InstallmentStatus.active:
-        statusColor = _kBrand;
-        statusLabel = 'Pending';
-        break;
-    }
-
-    return CardPopIn(
-      id: installment.id,
-      builder: (context, animate) => Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.grey[200]!),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    installment.itemDescription,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ).popInIf(animate, 0),
-            const SizedBox(height: 4),
-            Text(
-              installment.customerName ?? 'Customer',
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-            ).popInIf(animate, 1),
-            const SizedBox(height: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${installment.paidPayments} of ${installment.totalPayments} paid',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                    Text(
-                      currency.format(installment.monthlyPayment),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: installment.totalPayments > 0
-                        ? installment.paidPayments / installment.totalPayments
-                        : 0.0,
-                    backgroundColor: Colors.grey[200],
-                    color: statusColor,
-                    minHeight: 6,
-                  ),
-                ),
-              ],
-            ).popInIf(animate, 2),
-          ],
-        ),
-      ),
     );
   }
 }
