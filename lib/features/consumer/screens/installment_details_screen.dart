@@ -310,7 +310,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
 
                 Color segmentColor;
                 if (index < paidSegments) {
-                  segmentColor = Colors.blueGrey[800]!;
+                  segmentColor = Theme.of(context).primaryColor;
                 } else if (index < paidSegments + redSegments) {
                   segmentColor = Colors.red;
                 } else {
@@ -335,7 +335,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               child: LinearProgressIndicator(
                 value: widget.installment.totalPayments > 0 ? widget.installment.paidPayments / widget.installment.totalPayments : 0.0,
                 backgroundColor: Colors.grey[200],
-                color: Colors.blueGrey[800],
+                color: Theme.of(context).primaryColor,
                 minHeight: 8,
               ),
             ),

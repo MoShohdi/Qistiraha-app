@@ -24,8 +24,22 @@ class QistirahaApp extends StatelessWidget {
     return MaterialApp(
       title: 'Qistiraha',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF99AFD7),
+          primary: const Color(0xFF99AFD7),
+        ),
         useMaterial3: true,
+        tabBarTheme: const TabBarThemeData(
+          indicatorColor: Color(0xFF99AFD7),
+          labelColor: Color(0xFF99AFD7),
+          unselectedLabelColor: Colors.grey,
+        ),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: Color(0xFF99AFD7),
+        ),
+        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+          selectedItemColor: Color(0xFF99AFD7),
+        ),
       ),
       home: isLoggedIn ? const MainNavigation() : const WelcomeScreen(),
     );
