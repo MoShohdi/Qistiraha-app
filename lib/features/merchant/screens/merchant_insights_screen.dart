@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/services/time_service.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
+import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
 
-const _kBrand = Color(0xFF99AFD7);
-const _kBrandDark = Color(0xFF5A75AD);
+const _kBrand = kBrandColor;
+const _kBrandDark = kBrandColorDark;
 
 /// Data-driven dashboard for beta merchants: revenue KPIs, a store-health
 /// ring, a projected cash-flow chart, and a top-selling-items ranking —
@@ -139,31 +139,11 @@ class MerchantInsightsScreen extends StatelessWidget {
           overdueCount: _overdueCount,
         ),
         const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey[200]!),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Projected Cash Flow',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              Text(
-                'Expected collections over the next 6 months',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                height: 200,
-                child: _CashFlowChart(buckets: cashFlow, labels: monthLabels),
-              ),
-            ],
-          ),
+        BrandedBarChartCard(
+          title: 'Projected Cash Flow',
+          subtitle: 'Expected collections over the next 6 months',
+          buckets: cashFlow,
+          labels: monthLabels,
         ),
         const SizedBox(height: 24),
         Container(
@@ -367,108 +347,6 @@ class _StoreHealthCard extends StatelessWidget {
     height: 8,
     decoration: BoxDecoration(color: color, shape: BoxShape.circle),
   );
-}
-
-class _CashFlowChart extends StatelessWidget {
-  final List<double> buckets;
-  final List<String> labels;
-  const _CashFlowChart({required this.buckets, required this.labels});
-
-  @override
-  Widget build(BuildContext context) {
-    final maxBucket = buckets.isEmpty
-        ? 0.0
-        : buckets.reduce((a, b) => a > b ? a : b);
-    final maxY = maxBucket > 0 ? maxBucket * 1.2 : 1000.0;
-
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: maxY,
-        barTouchData: BarTouchData(
-          enabled: true,
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              return BarTooltipItem(
-                rod.toY.toStringAsFixed(0),
-                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              );
-            },
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                if (value.toInt() >= labels.length) return const SizedBox.shrink();
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  child: Text(
-                    labels[value.toInt()],
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                );
-              },
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 44,
-              interval: maxY / 5,
-              getTitlesWidget: (value, meta) {
-                String text;
-                if (value == 0) {
-                  text = '0';
-                } else if (value >= 1000) {
-                  text = '${(value / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
-                } else {
-                  text = value.toStringAsFixed(0);
-                }
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  child: Text(
-                    text,
-                    style: const TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                );
-              },
-            ),
-          ),
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: maxY / 5,
-          getDrawingHorizontalLine: (value) =>
-              FlLine(color: Colors.grey[200], strokeWidth: 1),
-        ),
-        borderData: FlBorderData(show: false),
-        barGroups: [
-          for (int i = 0; i < buckets.length; i++)
-            BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: buckets[i],
-                  width: 22,
-                  borderRadius: BorderRadius.circular(6),
-                  gradient: const LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [_kBrand, _kBrandDark],
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 class _TopItemRow extends StatelessWidget {
