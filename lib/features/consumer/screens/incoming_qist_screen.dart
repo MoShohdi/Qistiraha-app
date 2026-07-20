@@ -6,6 +6,7 @@ import '../controllers/add_installment_controller.dart';
 import '../../merchant/models/qist_link_payload.dart';
 import '../../auth/screens/welcome_screen.dart';
 import '../../../main.dart';
+import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 
@@ -130,63 +131,76 @@ class _IncomingQistScreenState extends State<IncomingQistScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey[200]!),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: _kBrand.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
+            CardPopIn(
+              id: 'incoming-qist-card',
+              builder: (context, animate) => Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey[200]!),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: _kBrand.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.storefront, color: _kBrand),
                         ),
-                        child: const Icon(Icons.storefront, color: _kBrand),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.payload.merchantName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.payload.merchantName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
                               ),
-                            ),
-                            const Text(
-                              'wants to add this installment plan',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
+                              const Text(
+                                'wants to add this installment plan',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 32),
-                  _row('Item', widget.payload.item),
-                  _row('Total Price', currency.format(widget.payload.price)),
-                  _row('Term', '${widget.payload.months} months'),
-                  _row('Monthly Payment', currency.format(_monthlyPayment)),
-                ],
+                      ],
+                    ).popInIf(animate, 0),
+                    Column(
+                      children: [
+                        const Divider(height: 32),
+                        _row('Item', widget.payload.item),
+                        _row(
+                          'Total Price',
+                          currency.format(widget.payload.price),
+                        ),
+                        _row('Term', '${widget.payload.months} months'),
+                        _row(
+                          'Monthly Payment',
+                          currency.format(_monthlyPayment),
+                        ),
+                      ],
+                    ).popInIf(animate, 1),
+                  ],
+                ),
               ),
             ),
             const Spacer(),
