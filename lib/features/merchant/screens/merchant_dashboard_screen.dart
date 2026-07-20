@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/services/hive_service.dart';
+import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 import 'package:qistiraha/features/auth/models/business_account.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
@@ -327,30 +328,37 @@ class _UpcomingTile extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
-                ),
+                ).popIn(0),
                 const SizedBox(height: 2),
-                Text(
-                  installment.itemDescription,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  isOverdue
-                      ? 'Overdue since ${DateFormat('dd MMM').format(installment.dueDate)}'
-                      : 'Due ${DateFormat('dd MMM yyyy').format(installment.dueDate)}',
-                  style: TextStyle(
-                    color: isOverdue ? Colors.red[700] : Colors.grey[500],
-                    fontSize: 12,
-                    fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      installment.itemDescription,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      isOverdue
+                          ? 'Overdue since ${DateFormat('dd MMM').format(installment.dueDate)}'
+                          : 'Due ${DateFormat('dd MMM yyyy').format(installment.dueDate)}',
+                      style: TextStyle(
+                        color: isOverdue ? Colors.red[700] : Colors.grey[500],
+                        fontSize: 12,
+                        fontWeight: isOverdue
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ).popIn(1),
               ],
             ),
           ),
           Text(
             currency.format(installment.monthlyPayment),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-          ),
+          ).popIn(0),
         ],
       ),
     );
@@ -660,41 +668,46 @@ class _PlanRow extends StatelessWidget {
                 ),
               ),
             ],
-          ),
+          ).popIn(0),
           const SizedBox(height: 4),
           Text(
             installment.customerName ?? 'Customer',
             style: TextStyle(color: Colors.grey[600], fontSize: 12),
-          ),
+          ).popIn(1),
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${installment.paidPayments} of ${installment.totalPayments} paid',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${installment.paidPayments} of ${installment.totalPayments} paid',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  Text(
+                    currency.format(installment.monthlyPayment),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                currency.format(installment.monthlyPayment),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: installment.totalPayments > 0
+                      ? installment.paidPayments / installment.totalPayments
+                      : 0.0,
+                  backgroundColor: Colors.grey[200],
+                  color: statusColor,
+                  minHeight: 6,
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: installment.totalPayments > 0
-                  ? installment.paidPayments / installment.totalPayments
-                  : 0.0,
-              backgroundColor: Colors.grey[200],
-              color: statusColor,
-              minHeight: 6,
-            ),
-          ),
+          ).popIn(2),
         ],
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/services/hive_service.dart';
+import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 import 'package:qistiraha/features/auth/models/user_account.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
@@ -252,7 +253,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               ],
                             ),
                           ],
-                        ),
+                        ).popIn(0),
                       ),
                     );
                   },

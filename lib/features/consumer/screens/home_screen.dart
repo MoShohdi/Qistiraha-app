@@ -8,6 +8,7 @@ import 'package:qistiraha/core/services/time_service.dart';
 import 'package:qistiraha/core/engine/penalty_engine.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/core/engine/affordability_engine.dart';
+import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 import 'add_installment_screen.dart';
 import 'installment_details_screen.dart';
 
@@ -382,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ],
-                ),
+                ).popIn(0),
                 const SizedBox(height: 8),
                 Text(
                   currencyFormatter.format(monthPayment),
@@ -390,7 +391,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 40,
                     fontWeight: FontWeight.bold,
                   ),
-                ),
+                ).popIn(1),
                 const SizedBox(height: 16),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ],
-                ),
+                ).popIn(2),
               ],
             ),
           ),
@@ -435,7 +436,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
-                ),
+                ).popIn(0),
                 const SizedBox(height: 8),
                 Text(
                   currencyFormatter.format(outstanding),
@@ -443,7 +444,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
                   ),
-                ),
+                ).popIn(1),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -458,7 +459,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: const TextStyle(color: Colors.grey, fontSize: 13),
                     ),
                   ],
-                ),
+                ).popIn(2),
               ],
             ),
           ),
@@ -709,7 +710,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ],
-          ),
+          ).popIn(0),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -1150,16 +1151,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // ── Tier 0: store name (animates first) ──────
+                            Text(
+                              inst.merchantName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ).popIn(0),
+                            // ── Tier 1: lender chip & details ────────────
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  inst.merchantName,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
                                 if (inst.provider != 'Other / Custom')
                                   Container(
                                     margin: const EdgeInsets.only(top: 4),
@@ -1180,52 +1183,52 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                   ),
-                              ],
-                            ),
-                            if (inst.itemDescription.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  inst.itemDescription,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(height: 4),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (isOverdue)
-                                  const Icon(
-                                    Icons.warning_amber_rounded,
-                                    color: Colors.red,
-                                    size: 16,
-                                  ),
-                                if (isOverdue) const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    isOverdue
-                                        ? 'Overdue by ${-daysToDue} days • Please contact your lender for late fees details.'
-                                        : dueText,
-                                    style: TextStyle(
-                                      color: isOverdue
-                                          ? Colors.red[700]
-                                          : Colors.grey[700],
-                                      fontSize: 13,
-                                      fontWeight: isOverdue
-                                          ? FontWeight.w600
-                                          : FontWeight.normal,
+                                if (inst.itemDescription.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      inst.itemDescription,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey[600],
+                                      ),
                                     ),
-                                    softWrap: isOverdue,
-                                    overflow: isOverdue
-                                        ? TextOverflow.visible
-                                        : TextOverflow.ellipsis,
                                   ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (isOverdue)
+                                      const Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Colors.red,
+                                        size: 16,
+                                      ),
+                                    if (isOverdue) const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        isOverdue
+                                            ? 'Overdue by ${-daysToDue} days • Please contact your lender for late fees details.'
+                                            : dueText,
+                                        style: TextStyle(
+                                          color: isOverdue
+                                              ? Colors.red[700]
+                                              : Colors.grey[700],
+                                          fontSize: 13,
+                                          fontWeight: isOverdue
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                        softWrap: isOverdue,
+                                        overflow: isOverdue
+                                            ? TextOverflow.visible
+                                            : TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
+                            ).popIn(1),
                           ],
                         ),
                       ),
@@ -1246,77 +1249,90 @@ class _HomeScreenState extends State<HomeScreen> {
                                   color: isOverdue ? Colors.red : Colors.black,
                                 ),
                               ),
-                            ),
+                            ).popIn(0),
                           ],
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  // ── Tier 2: progress bar (200ms later) ──────────────────
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Progress',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                      ),
-                      Text(
-                        '${inst.paidPayments} of ${inst.totalPayments} paid',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (inst.totalPayments <= 20)
-                    Row(
-                      children: List.generate(inst.totalPayments, (index) {
-                        int paidSegments = inst.paidPayments;
-                        int totalSegments = inst.totalPayments;
-                        int redSegments = 0;
-
-                        if (isAccelerated) {
-                          redSegments = totalSegments - paidSegments;
-                        } else {
-                          redSegments = visualRedSegments;
-                        }
-
-                        Color segmentColor;
-                        if (index < paidSegments) {
-                          segmentColor = Theme.of(context).primaryColor;
-                        } else if (index < paidSegments + redSegments) {
-                          segmentColor = Colors.red;
-                        } else {
-                          segmentColor = Colors.grey[200]!;
-                        }
-
-                        return Expanded(
-                          child: Container(
-                            height: 8,
-                            margin: EdgeInsets.only(
-                              right: index == totalSegments - 1 ? 0 : 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: segmentColor,
-                              borderRadius: BorderRadius.circular(4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Progress',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
                             ),
                           ),
-                        );
-                      }),
-                    )
-                  else
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: inst.totalPayments > 0
-                            ? inst.paidPayments / inst.totalPayments
-                            : 0.0,
-                        backgroundColor: Colors.grey[200],
-                        color: Theme.of(context).primaryColor,
-                        minHeight: 8,
+                          Text(
+                            '${inst.paidPayments} of ${inst.totalPayments} paid',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      if (inst.totalPayments <= 20)
+                        Row(
+                          children: List.generate(inst.totalPayments, (index) {
+                            int paidSegments = inst.paidPayments;
+                            int totalSegments = inst.totalPayments;
+                            int redSegments = 0;
+
+                            if (isAccelerated) {
+                              redSegments = totalSegments - paidSegments;
+                            } else {
+                              redSegments = visualRedSegments;
+                            }
+
+                            Color segmentColor;
+                            if (index < paidSegments) {
+                              segmentColor = Theme.of(context).primaryColor;
+                            } else if (index < paidSegments + redSegments) {
+                              segmentColor = Colors.red;
+                            } else {
+                              segmentColor = Colors.grey[200]!;
+                            }
+
+                            return Expanded(
+                              child: Container(
+                                height: 8,
+                                margin: EdgeInsets.only(
+                                  right: index == totalSegments - 1 ? 0 : 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: segmentColor,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            );
+                          }),
+                        )
+                      else
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: inst.totalPayments > 0
+                                ? inst.paidPayments / inst.totalPayments
+                                : 0.0,
+                            backgroundColor: Colors.grey[200],
+                            color: Theme.of(context).primaryColor,
+                            minHeight: 8,
+                          ),
+                        ),
+                    ],
+                  ).popIn(2),
                   if (inst.statusEnum != InstallmentStatus.paid) ...[
                     const SizedBox(height: 16),
+                    // ── Tier 2: pay button (same 200ms tier as progress) ──
                     (() {
                       Future<void> pay(int periodsToPay) async {
                         if (inst.paidPayments < inst.totalPayments) {
@@ -1502,7 +1518,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         );
                       }
-                    })(),
+                    })().popIn(2),
                   ],
                 ],
               ),
