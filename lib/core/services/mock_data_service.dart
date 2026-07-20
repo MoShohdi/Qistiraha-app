@@ -1,9 +1,7 @@
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 import 'package:qistiraha/features/auth/models/user_account.dart';
-import 'package:qistiraha/features/auth/models/business_account.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
-import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'hive_service.dart';
 import 'time_service.dart';
 

@@ -7,6 +7,7 @@ import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
+import 'merchant_insights_screen.dart';
 import 'merchant_portal_screen.dart';
 
 const _kBrand = Color(0xFF99AFD7);
@@ -26,7 +27,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: ValueListenableBuilder(
         valueListenable: HiveService.getBusinessBox().listenable(),
         builder: (context, Box<BusinessAccount> businessBox, _) {
@@ -112,6 +113,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                   Tab(text: 'Overview'),
                   Tab(text: 'Customers'),
                   Tab(text: 'Active Installments'),
+                  Tab(text: 'Insights'),
                 ],
               ),
             ),
@@ -127,6 +129,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                     _OverviewTab(plans: plans, currency: _currency),
                     _CustomersTab(plans: plans, currency: _currency),
                     _ActiveInstallmentsTab(plans: plans, currency: _currency),
+                    MerchantInsightsScreen(plans: plans, currency: _currency),
                   ],
                 );
               },
