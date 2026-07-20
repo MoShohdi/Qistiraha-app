@@ -83,6 +83,7 @@ class AddInstallmentController {
     required String category,
     required bool isLongTerm,
     required String paymentFrequency,
+    required String provider,
     int paidMonths = 0,
   }) async {
     final userBox = HiveService.getUserBox();
@@ -107,6 +108,8 @@ class AddInstallmentController {
       category: category,
       isLongTerm: isLongTerm,
       paymentFrequency: paymentFrequency,
+      provider: provider,
+      lender: provider,
     );
 
     final installmentBox = HiveService.getInstallmentBox();

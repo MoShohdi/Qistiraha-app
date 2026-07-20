@@ -1080,7 +1080,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     Color segmentColor;
                     if (index < paidSegments) {
-                      segmentColor = Colors.black;
+                      segmentColor = Theme.of(context).primaryColor;
                     } else if (index < paidSegments + redSegments) {
                       segmentColor = Colors.red;
                     } else {
@@ -1105,7 +1105,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: LinearProgressIndicator(
                     value: inst.totalPayments > 0 ? inst.paidPayments / inst.totalPayments : 0.0,
                     backgroundColor: Colors.grey[200],
-                    color: Colors.black,
+                    color: Theme.of(context).primaryColor,
                     minHeight: 8,
                   ),
                 ),
