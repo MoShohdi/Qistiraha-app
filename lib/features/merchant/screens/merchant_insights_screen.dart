@@ -4,6 +4,7 @@ import 'package:qistiraha/core/services/time_service.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
+import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 
 const _kBrand = kBrandColor;
 const _kBrandDark = kBrandColorDark;
@@ -30,11 +31,21 @@ class MerchantInsightsScreen extends StatelessWidget {
     return sum + (i.paidPayments * i.monthlyPayment);
   });
 
-  int get _onTimeCount =>
-      plans.where((i) => i.statusEnum != InstallmentStatus.overdue && i.statusEnum != InstallmentStatus.defaulted).length;
+  int get _onTimeCount => plans
+      .where(
+        (i) =>
+            i.statusEnum != InstallmentStatus.overdue &&
+            i.statusEnum != InstallmentStatus.defaulted,
+      )
+      .length;
 
-  int get _overdueCount =>
-      plans.where((i) => i.statusEnum == InstallmentStatus.overdue || i.statusEnum == InstallmentStatus.defaulted).length;
+  int get _overdueCount => plans
+      .where(
+        (i) =>
+            i.statusEnum == InstallmentStatus.overdue ||
+            i.statusEnum == InstallmentStatus.defaulted,
+      )
+      .length;
 
   double get _onTimePct => plans.isEmpty ? 1.0 : _onTimeCount / plans.length;
 
@@ -51,7 +62,8 @@ class MerchantInsightsScreen extends StatelessWidget {
       final remaining = inst.totalPayments - inst.paidPayments;
       if (remaining <= 0) continue;
 
-      final isOverdue = inst.statusEnum == InstallmentStatus.overdue ||
+      final isOverdue =
+          inst.statusEnum == InstallmentStatus.overdue ||
           inst.statusEnum == InstallmentStatus.defaulted;
       final anchorDate = isOverdue && inst.dueDate.isBefore(now)
           ? now
@@ -156,13 +168,24 @@ class MerchantInsightsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Top Selling Items',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              Text(
-                'Ranked by number of active installment plans',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+              CardPopIn(
+                id: 'merchant-top-items-header',
+                builder: (context, animate) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Top Selling Items',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'Ranked by number of active installment plans',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ],
+                ).popInIf(animate, 0),
               ),
               const SizedBox(height: 16),
               if (topItems.isEmpty)
@@ -211,49 +234,55 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+    return CardPopIn(
+      id: 'merchant-insights-stat-$label',
+      builder: (context, animate) => Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ).popInIf(animate, 0),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ).popInIf(animate, 0),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ).popInIf(animate, 1),
+          ],
+        ),
       ),
     );
   }
@@ -272,72 +301,75 @@ class _StoreHealthCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pctLabel = '${(onTimePct * 100).toStringAsFixed(0)}%';
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 72,
-            height: 72,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: CircularProgressIndicator(
-                    value: onTimePct.clamp(0.0, 1.0),
-                    strokeWidth: 7,
-                    backgroundColor: Colors.grey[200],
-                    valueColor: const AlwaysStoppedAnimation<Color>(_kBrand),
-                  ),
-                ),
-                Text(
-                  pctLabel,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Store Health',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    _dot(_kBrand),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$onTimeCount on-time',
-                      style: TextStyle(color: Colors.grey[700], fontSize: 12),
+    return CardPopIn(
+      id: 'merchant-store-health-card',
+      builder: (context, animate) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 72,
+              height: 72,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: CircularProgressIndicator(
+                      value: onTimePct.clamp(0.0, 1.0),
+                      strokeWidth: 7,
+                      backgroundColor: Colors.grey[200],
+                      valueColor: const AlwaysStoppedAnimation<Color>(_kBrand),
                     ),
-                    const SizedBox(width: 14),
-                    _dot(Colors.red),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$overdueCount overdue',
-                      style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                  ),
+                  Text(
+                    pctLabel,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
+                  ),
+                ],
+              ),
+            ).popInIf(animate, 0),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Store Health',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _dot(_kBrand),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$onTimeCount on-time',
+                        style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                      ),
+                      const SizedBox(width: 14),
+                      _dot(Colors.red),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$overdueCount overdue',
+                        style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ).popInIf(animate, 1),
+          ],
+        ),
       ),
     );
   }
@@ -364,65 +396,68 @@ class _TopItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = maxCount > 0 ? item.count / maxCount : 0.0;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _kBrand.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '$rank',
-              style: const TextStyle(
-                color: _kBrandDark,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+    return CardPopIn(
+      id: 'merchant-top-item-${item.name}',
+      builder: (context, animate) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _kBrand.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
+              child: Text(
+                '$rank',
+                style: const TextStyle(
+                  color: _kBrandDark,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ).popInIf(animate, 0),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
-                    ),
-                    Text(
-                      '${item.count} plan${item.count == 1 ? '' : 's'}',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.grey[200],
-                    color: _kBrand,
-                    minHeight: 6,
+                      Text(
+                        '${item.count} plan${item.count == 1 ? '' : 's'}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-          ),
-        ],
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: Colors.grey[200],
+                      color: _kBrand,
+                      minHeight: 6,
+                    ),
+                  ),
+                ],
+              ),
+            ).popInIf(animate, 1),
+          ],
+        ),
       ),
     );
   }

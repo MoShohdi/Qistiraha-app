@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 /// Shared timing for the staggered "card sits empty, then its content pops
 /// in" entrance used across installment and dashboard cards. The outer
@@ -38,5 +39,59 @@ extension CardEntranceAnimation on Widget {
           duration: kCardAnimDuration,
           curve: kCardPopCurve,
         );
+  }
+
+  /// Same as [popIn], but only applies the effect when [shouldAnimate] is
+  /// true — otherwise returns the widget unchanged. Used inside
+  /// [CardPopIn.builder] so a card's tiers only animate once it has
+  /// actually scrolled into view.
+  Widget popInIf(bool shouldAnimate, int tier) =>
+      shouldAnimate ? popIn(tier) : this;
+}
+
+/// Wraps a card so its entrance animation only plays the first time it
+/// scrolls into the viewport — not the moment it's built. This matters for
+/// any list where items below the fold get built eagerly (e.g. a
+/// `ListView` with `shrinkWrap: true`, or content further down a
+/// `SingleChildScrollView`): without this, a card's `.popIn()` timers would
+/// already have finished by the time the user scrolls down to see it.
+///
+/// [id] must be stable and unique across the whole app (it becomes the
+/// underlying `VisibilityDetector` key) — e.g. an installment's id, or a
+/// fixed string for a one-off dashboard card.
+///
+/// [builder] receives `animate: true` exactly once, the first time the
+/// card becomes >5% visible; before that it's called with `animate: false`
+/// so the (invisible) placeholder still reserves the card's real layout
+/// height for accurate visibility detection.
+class CardPopIn extends StatefulWidget {
+  final String id;
+  final Widget Function(BuildContext context, bool animate) builder;
+
+  const CardPopIn({super.key, required this.id, required this.builder});
+
+  @override
+  State<CardPopIn> createState() => _CardPopInState();
+}
+
+class _CardPopInState extends State<CardPopIn> {
+  bool _hasAppeared = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasAppeared) {
+      return widget.builder(context, true);
+    }
+    return VisibilityDetector(
+      key: Key('card-pop-in-${widget.id}'),
+      onVisibilityChanged: (info) {
+        if (!_hasAppeared && info.visibleFraction > 0.05 && mounted) {
+          setState(() => _hasAppeared = true);
+        }
+      },
+      child: IgnorePointer(
+        child: Opacity(opacity: 0, child: widget.builder(context, false)),
+      ),
+    );
   }
 }

@@ -11,6 +11,7 @@ import 'package:qistiraha/core/engine/penalty_engine.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import '../../../widgets/income_edit_bottom_sheet.dart';
 import '../../../widgets/branded_bar_chart_card.dart';
+import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 
 // ---------------------------------------------------------------------------
 // Budget Status helper — evaluated once, consumed by both cards
@@ -237,191 +238,195 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 _buildAdvisorCard(user, installments.toList()),
 
                 const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey[200]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text(
-                                'Cash Flow Health',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                CardPopIn(
+                  id: 'cash-flow-health-card',
+                  builder: (context, animate) => Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'Cash Flow Health',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                'This month\'s income vs obligations',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 14,
+                                Text(
+                                  'This month\'s income vs obligations',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 14,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          InkWell(
-                            onTap: () {
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                builder: (context) =>
-                                    const IncomeEditBottomSheet(),
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.blue[50],
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.edit,
-                                color: Colors.blue,
-                                size: 20,
+                              ],
+                            ),
+                            InkWell(
+                              onTap: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  builder: (context) =>
+                                      const IncomeEditBottomSheet(),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.edit,
+                                  color: Colors.blue,
+                                  size: 20,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      Builder(
-                        builder: (context) {
-                          final DateTime now = TimeService.now();
-                          final DateRange cycle =
-                              AffordabilityEngine.getCurrentBillingCycle(
-                                user.salaryDay,
-                                now,
-                              );
-                          final double owed =
-                              AffordabilityEngine.getOwedInCycle(
-                                installments.toList(),
-                                cycle,
-                              );
-                          final double paid =
-                              AffordabilityEngine.getPaidInCycle(
-                                installments.toList(),
-                                cycle,
-                              );
-                          final double totalCommitted = owed + paid;
-                          final double income = user.monthlyIncome;
-                          final double available =
-                              AffordabilityEngine.calculateSafeToSpend(
-                                installments.toList(),
-                                income,
-                                user.salaryDay,
-                              );
-                          final double percentage = income > 0
-                              ? (totalCommitted / income)
-                              : 0;
+                          ],
+                        ).popInIf(animate, 0),
+                        const SizedBox(height: 24),
+                        Builder(
+                          builder: (context) {
+                            final DateTime now = TimeService.now();
+                            final DateRange cycle =
+                                AffordabilityEngine.getCurrentBillingCycle(
+                                  user.salaryDay,
+                                  now,
+                                );
+                            final double owed =
+                                AffordabilityEngine.getOwedInCycle(
+                                  installments.toList(),
+                                  cycle,
+                                );
+                            final double paid =
+                                AffordabilityEngine.getPaidInCycle(
+                                  installments.toList(),
+                                  cycle,
+                                );
+                            final double totalCommitted = owed + paid;
+                            final double income = user.monthlyIncome;
+                            final double available =
+                                AffordabilityEngine.calculateSafeToSpend(
+                                  installments.toList(),
+                                  income,
+                                  user.salaryDay,
+                                );
+                            final double percentage = income > 0
+                                ? (totalCommitted / income)
+                                : 0;
 
-                          // ── Tier evaluation ─────────────────────────────
-                          final _BudgetStatus status = _getBudgetStatus(
-                            percentage,
-                          );
-                          final Color barColor = status.tierColor;
+                            // ── Tier evaluation ─────────────────────────────
+                            final _BudgetStatus status = _getBudgetStatus(
+                              percentage,
+                            );
+                            final Color barColor = status.tierColor;
 
-                          final format = NumberFormat.currency(
-                            symbol: 'EGP ',
-                            decimalDigits: 0,
-                          );
+                            final format = NumberFormat.currency(
+                              symbol: 'EGP ',
+                              decimalDigits: 0,
+                            );
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Available Cash',
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 12,
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Available Cash',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
                                         ),
-                                      ),
-                                      Text(
-                                        format.format(available),
-                                        style: const TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
+                                        Text(
+                                          format.format(available),
+                                          style: const TextStyle(
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      const Text(
-                                        'Total Income',
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 12,
+                                      ],
+                                    ),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        const Text(
+                                          'Total Income',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
                                         ),
-                                      ),
-                                      Text(
-                                        format.format(income),
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
+                                        Text(
+                                          format.format(income),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 24),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: percentage.clamp(0.0, 1.0),
-                                  backgroundColor: Colors.grey[200],
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    barColor,
-                                  ),
-                                  minHeight: 8,
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    '${status.tierName} · ${(percentage * 100).toStringAsFixed(0)}% Consumed',
-                                    style: TextStyle(
-                                      color: barColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
+                                const SizedBox(height: 24),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: percentage.clamp(0.0, 1.0),
+                                    backgroundColor: Colors.grey[200],
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      barColor,
                                     ),
+                                    minHeight: 8,
                                   ),
-                                  Text(
-                                    '${format.format(totalCommitted)} Committed',
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '${status.tierName} · ${(percentage * 100).toStringAsFixed(0)}% Consumed',
+                                      style: TextStyle(
+                                        color: barColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
+                                    Text(
+                                      '${format.format(totalCommitted)} Committed',
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ).popInIf(animate, 1);
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -596,80 +601,86 @@ class _InsightsScreenState extends State<InsightsScreen> {
       cIdx++;
     });
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(color: Colors.grey, fontSize: 14),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.pie_chart_outline, color: Colors.blue),
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-          SizedBox(
-            height: 200,
-            child: Stack(
-              alignment: Alignment.center,
+    return CardPopIn(
+      id: 'donut-chart-$title',
+      builder: (context, animate) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                PieChart(
-                  PieChartData(
-                    sectionsSpace: 0,
-                    centerSpaceRadius: 60,
-                    sections: pieSections,
-                  ),
-                ),
                 Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${categoryTotals.keys.length}',
+                      title,
                       style: const TextStyle(
-                        fontSize: 28,
                         fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
                     ),
-                    const Text(
-                      'Categories',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: Colors.grey, fontSize: 14),
                     ),
                   ],
                 ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.pie_chart_outline,
+                    color: Colors.blue,
+                  ),
+                ),
               ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          Column(children: legendItems),
-        ],
+            ).popInIf(animate, 0),
+            const SizedBox(height: 32),
+            SizedBox(
+              height: 200,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  PieChart(
+                    PieChartData(
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 60,
+                      sections: pieSections,
+                    ),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${categoryTotals.keys.length}',
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Text(
+                        'Categories',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ).popInIf(animate, 1),
+            const SizedBox(height: 32),
+            Column(children: legendItems).popInIf(animate, 2),
+          ],
+        ),
       ),
     );
   }
@@ -739,43 +750,46 @@ class _InsightsScreenState extends State<InsightsScreen> {
           '${usedPct.toStringAsFixed(0)}% of your income is committed to installments.';
     }
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accentColor.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: accentColor, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  headline,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: accentColor,
+    return CardPopIn(
+      id: 'advisor-card',
+      builder: (context, animate) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: accentColor, size: 28).popInIf(animate, 0),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    headline,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: accentColor,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  detail,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[700],
-                    height: 1.6,
+                  const SizedBox(height: 8),
+                  Text(
+                    detail,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[700],
+                      height: 1.6,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ).popInIf(animate, 1),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

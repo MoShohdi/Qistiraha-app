@@ -248,49 +248,55 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+    return CardPopIn(
+      id: 'merchant-stat-card-$label',
+      builder: (context, animate) => Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ).popInIf(animate, 0),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ).popInIf(animate, 0),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ).popInIf(animate, 1),
+          ],
+        ),
       ),
     );
   }
@@ -304,62 +310,65 @@ class _UpcomingTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isOverdue = installment.statusEnum == InstallmentStatus.overdue;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isOverdue
-              ? Colors.red.withValues(alpha: 0.4)
-              : Colors.grey[200]!,
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  installment.customerName ?? 'Customer',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ).popIn(0),
-                const SizedBox(height: 2),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      installment.itemDescription,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      isOverdue
-                          ? 'Overdue since ${DateFormat('dd MMM').format(installment.dueDate)}'
-                          : 'Due ${DateFormat('dd MMM yyyy').format(installment.dueDate)}',
-                      style: TextStyle(
-                        color: isOverdue ? Colors.red[700] : Colors.grey[500],
-                        fontSize: 12,
-                        fontWeight: isOverdue
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ).popIn(1),
-              ],
-            ),
+    return CardPopIn(
+      id: installment.id,
+      builder: (context, animate) => Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isOverdue
+                ? Colors.red.withValues(alpha: 0.4)
+                : Colors.grey[200]!,
           ),
-          Text(
-            currency.format(installment.monthlyPayment),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-          ).popIn(0),
-        ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    installment.customerName ?? 'Customer',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ).popInIf(animate, 0),
+                  const SizedBox(height: 2),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        installment.itemDescription,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        isOverdue
+                            ? 'Overdue since ${DateFormat('dd MMM').format(installment.dueDate)}'
+                            : 'Due ${DateFormat('dd MMM yyyy').format(installment.dueDate)}',
+                        style: TextStyle(
+                          color: isOverdue ? Colors.red[700] : Colors.grey[500],
+                          fontSize: 12,
+                          fontWeight: isOverdue
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ).popInIf(animate, 1),
+                ],
+              ),
+            ),
+            Text(
+              currency.format(installment.monthlyPayment),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ).popInIf(animate, 0),
+          ],
+        ),
       ),
     );
   }
@@ -447,59 +456,62 @@ class _CustomersTab extends StatelessWidget {
           healthColor = _kBrand;
         }
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey[200]!),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: healthColor.withValues(alpha: 0.15),
-                child: Icon(Icons.person, color: healthColor),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      c.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+        return CardPopIn(
+          id: 'merchant-customer-${c.key}',
+          builder: (context, animate) => Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: healthColor.withValues(alpha: 0.15),
+                  child: Icon(Icons.person, color: healthColor),
+                ).popInIf(animate, 0),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        c.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${c.plans.length} plan${c.plans.length == 1 ? '' : 's'} • Outstanding ${currency.format(c.outstanding)}',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        '${c.plans.length} plan${c.plans.length == 1 ? '' : 's'} • Outstanding ${currency.format(c.outstanding)}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                    ],
+                  ).popInIf(animate, 1),
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: healthColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  healthLabel,
-                  style: TextStyle(
-                    color: healthColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
                   ),
-                ),
-              ),
-            ],
+                  decoration: BoxDecoration(
+                    color: healthColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    healthLabel,
+                    style: TextStyle(
+                      color: healthColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ).popInIf(animate, 2),
+              ],
+            ),
           ),
         );
       },
@@ -625,90 +637,93 @@ class _PlanRow extends StatelessWidget {
         break;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  installment.itemDescription,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  statusLabel,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ).popIn(0),
-          const SizedBox(height: 4),
-          Text(
-            installment.customerName ?? 'Customer',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-          ).popIn(1),
-          const SizedBox(height: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${installment.paidPayments} of ${installment.totalPayments} paid',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                  Text(
-                    currency.format(installment.monthlyPayment),
+    return CardPopIn(
+      id: installment.id,
+      builder: (context, animate) => Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    installment.itemDescription,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: installment.totalPayments > 0
-                      ? installment.paidPayments / installment.totalPayments
-                      : 0.0,
-                  backgroundColor: Colors.grey[200],
-                  color: statusColor,
-                  minHeight: 6,
                 ),
-              ),
-            ],
-          ).popIn(2),
-        ],
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ).popInIf(animate, 0),
+            const SizedBox(height: 4),
+            Text(
+              installment.customerName ?? 'Customer',
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ).popInIf(animate, 1),
+            const SizedBox(height: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${installment.paidPayments} of ${installment.totalPayments} paid',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    Text(
+                      currency.format(installment.monthlyPayment),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: installment.totalPayments > 0
+                        ? installment.paidPayments / installment.totalPayments
+                        : 0.0,
+                    backgroundColor: Colors.grey[200],
+                    color: statusColor,
+                    minHeight: 6,
+                  ),
+                ),
+              ],
+            ).popInIf(animate, 2),
+          ],
+        ),
       ),
     );
   }
