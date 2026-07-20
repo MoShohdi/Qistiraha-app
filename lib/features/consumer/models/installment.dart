@@ -62,6 +62,20 @@ class Installment extends HiveObject {
   @HiveField(18, defaultValue: 'Other / Custom')
   String provider;
 
+  /// Links this installment to a [BusinessAccount.id] when it originated from
+  /// a merchant's Qist-Link (QR code or WhatsApp share). Null for
+  /// installments the consumer entered manually.
+  @HiveField(19)
+  String? merchantId;
+
+  /// The merchant's own label for who owes this installment (as entered on
+  /// the "Generate Payment Link" screen). Used by the Merchant Dashboard.
+  @HiveField(20)
+  String? customerName;
+
+  @HiveField(21)
+  String? customerPhone;
+
   Installment({
     required this.id,
     required this.amount,
@@ -82,6 +96,9 @@ class Installment extends HiveObject {
     this.isLongTerm = false,
     this.paymentFrequency = 'Monthly',
     this.provider = 'Other / Custom',
+    this.merchantId,
+    this.customerName,
+    this.customerPhone,
   });
 
   // ---------------------------------------------------------------------------
@@ -100,11 +117,15 @@ class Installment extends HiveObject {
 
   int get monthsPerPayment {
     switch (paymentFrequency) {
-      case 'Quarterly': return 3;
-      case 'Semi-Annually': return 6;
-      case 'Annually': return 12;
+      case 'Quarterly':
+        return 3;
+      case 'Semi-Annually':
+        return 6;
+      case 'Annually':
+        return 12;
       case 'Monthly':
-      default: return 1;
+      default:
+        return 1;
     }
   }
 
@@ -143,5 +164,5 @@ const List<String> kEgyptianProviders = [
   'saib Bank',
   'Housing and Development Bank (HDB)',
   // Fallback
-  'Other / Custom'
+  'Other / Custom',
 ];

@@ -18,7 +18,9 @@ class _IncomeEditBottomSheetState extends State<IncomeEditBottomSheet> {
   void initState() {
     super.initState();
     final user = HiveService.getUserBox().values.first;
-    _incomeController = TextEditingController(text: user.monthlyIncome.toStringAsFixed(0));
+    _incomeController = TextEditingController(
+      text: user.monthlyIncome.toStringAsFixed(0),
+    );
     _salaryDay = user.salaryDay.toDouble();
   }
 
@@ -112,10 +114,15 @@ class _IncomeEditBottomSheetState extends State<IncomeEditBottomSheet> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueAccent,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 onPressed: _saveData,
-                child: const Text('Save Configuration', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: const Text(
+                  'Save Configuration',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
               ),
             ),
             const SizedBox(height: 24),

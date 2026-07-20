@@ -16,10 +16,10 @@ import '../../../widgets/income_edit_bottom_sheet.dart';
 // ---------------------------------------------------------------------------
 
 class _BudgetStatus {
-  final String label;     // e.g. "Safe-to-Spend"
-  final Color tierColor;  // dominant accent color
-  final Color bgColor;    // light tint for card backgrounds
-  final String tierName;  // e.g. "Optimized"
+  final String label; // e.g. "Safe-to-Spend"
+  final Color tierColor; // dominant accent color
+  final Color bgColor; // light tint for card backgrounds
+  final String tierName; // e.g. "Optimized"
 
   const _BudgetStatus({
     required this.label,
@@ -75,10 +75,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
         elevation: 0,
         title: const Text(
           'Qist List Insights',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
       body: ValueListenableBuilder(
@@ -96,7 +93,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
           Map<String, double> longTermTotals = {};
           double shortTermDebt = 0;
           double longTermDebt = 0;
-          
+
           for (var inst in installments) {
             if (inst.statusEnum != InstallmentStatus.paid) {
               double drain = inst.monthlyPayment;
@@ -107,12 +104,14 @@ class _InsightsScreenState extends State<InsightsScreen> {
               } else if (inst.paymentFrequency == 'Semi-Annually') {
                 drain /= 6;
               }
-              
+
               if (inst.isLongTerm) {
-                longTermTotals[inst.category] = (longTermTotals[inst.category] ?? 0) + drain;
+                longTermTotals[inst.category] =
+                    (longTermTotals[inst.category] ?? 0) + drain;
                 longTermDebt += drain;
               } else {
-                shortTermTotals[inst.category] = (shortTermTotals[inst.category] ?? 0) + drain;
+                shortTermTotals[inst.category] =
+                    (shortTermTotals[inst.category] ?? 0) + drain;
                 shortTermDebt += drain;
               }
             }
@@ -121,7 +120,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
           // Dynamic scaling logic
           int stepSize = 1;
           int numBuckets = 6;
-          
+
           if (_chartFilter == 'Quarterly') {
             stepSize = 3;
             numBuckets = 4;
@@ -136,16 +135,25 @@ class _InsightsScreenState extends State<InsightsScreen> {
           List<BarChartGroupData> barGroups = [];
           DateTime now = TimeService.now();
           List<String> labels = [];
-          
+
           for (int i = 0; i < numBuckets; i++) {
             if (i == 0 && _chartFilter == 'All') {
               labels.add('Now');
             } else {
-              DateTime mDate = DateTime(now.year, now.month + (i * stepSize), 1);
+              DateTime mDate = DateTime(
+                now.year,
+                now.month + (i * stepSize),
+                1,
+              );
               if (_chartFilter == 'Annually') {
                 labels.add(DateFormat('yyyy').format(mDate));
-              } else if (_chartFilter == 'Quarterly' || _chartFilter == 'Semi-Annually') {
-                DateTime endDate = DateTime(now.year, now.month + (i * stepSize) + stepSize - 1, 1);
+              } else if (_chartFilter == 'Quarterly' ||
+                  _chartFilter == 'Semi-Annually') {
+                DateTime endDate = DateTime(
+                  now.year,
+                  now.month + (i * stepSize) + stepSize - 1,
+                  1,
+                );
                 String startStr = DateFormat('MMM').format(mDate);
                 String endStr = DateFormat('MMM').format(endDate);
                 labels.add('$startStr-$endStr');
@@ -160,7 +168,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
           Color colorFuture = Colors.grey[300]!;
 
           List<double> buckets = List.filled(numBuckets, 0.0);
-          List<List<BarChartRodStackItem>> stackItemsByMonth = List.generate(numBuckets, (_) => []);
+          List<List<BarChartRodStackItem>> stackItemsByMonth = List.generate(
+            numBuckets,
+            (_) => [],
+          );
 
           for (var inst in installments) {
             if (inst.statusEnum != InstallmentStatus.paid) {
@@ -170,29 +181,48 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 int remaining = inst.totalPayments - inst.paidPayments;
                 double amount = (remaining * inst.monthlyPayment) + pr.lateFee;
                 if (amount > 0) {
-                  stackItemsByMonth[0].add(BarChartRodStackItem(buckets[0], buckets[0] + amount, colorDefault));
+                  stackItemsByMonth[0].add(
+                    BarChartRodStackItem(
+                      buckets[0],
+                      buckets[0] + amount,
+                      colorDefault,
+                    ),
+                  );
                   buckets[0] += amount;
                 }
               } else {
                 int missed = PenaltyEngine.calculateUncappedMissedPeriods(inst);
                 if (missed > 0) {
                   double amount = (missed * inst.monthlyPayment) + pr.lateFee;
-                  stackItemsByMonth[0].add(BarChartRodStackItem(buckets[0], buckets[0] + amount, colorDefault));
+                  stackItemsByMonth[0].add(
+                    BarChartRodStackItem(
+                      buckets[0],
+                      buckets[0] + amount,
+                      colorDefault,
+                    ),
+                  );
                   buckets[0] += amount;
                 }
 
                 int paymentsAdded = 0;
                 int remainingPayments = inst.totalPayments - inst.paidPayments;
                 DateTime projectedDate = inst.dueDate;
-                
+
                 // If we missed payments, the next future payment is shifted forward
                 if (missed > 0) {
-                   int monthsToAdvance = missed * inst.monthsPerPayment;
-                   projectedDate = DateTime(projectedDate.year, projectedDate.month + monthsToAdvance, projectedDate.day);
+                  int monthsToAdvance = missed * inst.monthsPerPayment;
+                  projectedDate = DateTime(
+                    projectedDate.year,
+                    projectedDate.month + monthsToAdvance,
+                    projectedDate.day,
+                  );
                 }
 
                 while (paymentsAdded < remainingPayments) {
-                  int monthsDiff = ((projectedDate.year - now.year) * 12) + projectedDate.month - now.month;
+                  int monthsDiff =
+                      ((projectedDate.year - now.year) * 12) +
+                      projectedDate.month -
+                      now.month;
 
                   int bucketIndex = monthsDiff ~/ stepSize;
                   if (bucketIndex >= numBuckets) {
@@ -201,22 +231,40 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
                   if (bucketIndex >= 0) {
                     if (monthsDiff == 0 && missed == 0) {
-                      stackItemsByMonth[bucketIndex].add(BarChartRodStackItem(buckets[bucketIndex], buckets[bucketIndex] + inst.monthlyPayment, colorDueNow));
+                      stackItemsByMonth[bucketIndex].add(
+                        BarChartRodStackItem(
+                          buckets[bucketIndex],
+                          buckets[bucketIndex] + inst.monthlyPayment,
+                          colorDueNow,
+                        ),
+                      );
                       buckets[bucketIndex] += inst.monthlyPayment;
                     } else if (monthsDiff > 0) {
-                      stackItemsByMonth[bucketIndex].add(BarChartRodStackItem(buckets[bucketIndex], buckets[bucketIndex] + inst.monthlyPayment, colorFuture));
+                      stackItemsByMonth[bucketIndex].add(
+                        BarChartRodStackItem(
+                          buckets[bucketIndex],
+                          buckets[bucketIndex] + inst.monthlyPayment,
+                          colorFuture,
+                        ),
+                      );
                       buckets[bucketIndex] += inst.monthlyPayment;
                     }
                   }
 
-                  projectedDate = DateTime(projectedDate.year, projectedDate.month + inst.monthsPerPayment, projectedDate.day);
+                  projectedDate = DateTime(
+                    projectedDate.year,
+                    projectedDate.month + inst.monthsPerPayment,
+                    projectedDate.day,
+                  );
                   paymentsAdded++;
                 }
               }
             }
           }
 
-          final double maxBucket = buckets.isEmpty ? 0.0 : buckets.reduce((curr, next) => curr > next ? curr : next);
+          final double maxBucket = buckets.isEmpty
+              ? 0.0
+              : buckets.reduce((curr, next) => curr > next ? curr : next);
           final double chartMaxY = maxBucket > 0 ? maxBucket * 1.2 : 10000;
 
           for (int i = 0; i < numBuckets; i++) {
@@ -243,11 +291,18 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 12, height: 12,
-                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   const SizedBox(width: 6),
-                  Text(text, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                  Text(
+                    text,
+                    style: const TextStyle(fontSize: 12, color: Colors.black87),
+                  ),
                 ],
               ),
             );
@@ -290,8 +345,20 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: const [
-                              Text('Cash Flow Health', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              Text('This month\'s income vs obligations', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                              Text(
+                                'Cash Flow Health',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Text(
+                                'This month\'s income vs obligations',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 14,
+                                ),
+                              ),
                             ],
                           ),
                           InkWell(
@@ -299,7 +366,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
                               showModalBottomSheet(
                                 context: context,
                                 isScrollControlled: true,
-                                builder: (context) => const IncomeEditBottomSheet(),
+                                builder: (context) =>
+                                    const IncomeEditBottomSheet(),
                               );
                             },
                             child: Container(
@@ -308,9 +376,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                 color: Colors.blue[50],
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                              child: const Icon(
+                                Icons.edit,
+                                color: Colors.blue,
+                                size: 20,
+                              ),
                             ),
-                          )
+                          ),
                         ],
                       ),
                       const SizedBox(height: 24),
@@ -318,43 +390,87 @@ class _InsightsScreenState extends State<InsightsScreen> {
                         builder: (context) {
                           final DateTime now = TimeService.now();
                           final DateRange cycle =
-                              AffordabilityEngine.getCurrentBillingCycle(user.salaryDay, now);
+                              AffordabilityEngine.getCurrentBillingCycle(
+                                user.salaryDay,
+                                now,
+                              );
                           final double owed =
-                              AffordabilityEngine.getOwedInCycle(installments.toList(), cycle);
+                              AffordabilityEngine.getOwedInCycle(
+                                installments.toList(),
+                                cycle,
+                              );
                           final double paid =
-                              AffordabilityEngine.getPaidInCycle(installments.toList(), cycle);
+                              AffordabilityEngine.getPaidInCycle(
+                                installments.toList(),
+                                cycle,
+                              );
                           final double totalCommitted = owed + paid;
                           final double income = user.monthlyIncome;
                           final double available =
                               AffordabilityEngine.calculateSafeToSpend(
-                                  installments.toList(), income, user.salaryDay);
-                          final double percentage =
-                              income > 0 ? (totalCommitted / income) : 0;
+                                installments.toList(),
+                                income,
+                                user.salaryDay,
+                              );
+                          final double percentage = income > 0
+                              ? (totalCommitted / income)
+                              : 0;
 
                           // ── Tier evaluation ─────────────────────────────
-                          final _BudgetStatus status = _getBudgetStatus(percentage);
+                          final _BudgetStatus status = _getBudgetStatus(
+                            percentage,
+                          );
                           final Color barColor = status.tierColor;
 
-                          final format = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
+                          final format = NumberFormat.currency(
+                            symbol: 'EGP ',
+                            decimalDigits: 0,
+                          );
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Available Cash', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                      Text(format.format(available), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                                      const Text(
+                                        'Available Cash',
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      Text(
+                                        format.format(available),
+                                        style: const TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                   Column(
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
-                                      const Text('Total Income', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                      Text(format.format(income), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                                      const Text(
+                                        'Total Income',
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      Text(
+                                        format.format(income),
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ],
@@ -365,62 +481,89 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                 child: LinearProgressIndicator(
                                   value: percentage.clamp(0.0, 1.0),
                                   backgroundColor: Colors.grey[200],
-                                  valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    barColor,
+                                  ),
                                   minHeight: 8,
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     '${status.tierName} · ${(percentage * 100).toStringAsFixed(0)}% Consumed',
-                                    style: TextStyle(color: barColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                    style: TextStyle(
+                                      color: barColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                   Text(
                                     '${format.format(totalCommitted)} Committed',
-                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ],
-                              )
+                              ),
                             ],
                           );
-                        }
+                        },
                       ),
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: ['All', 'Quarterly', 'Semi-Annually', 'Annually'].map((filter) {
-                      final isSelected = _chartFilter == filter;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: FilterChip(
-                          label: Text(filter, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontSize: 13, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                          selected: isSelected,
-                          onSelected: (bool selected) {
-                            setState(() {
-                              _chartFilter = filter;
-                            });
-                          },
-                          backgroundColor: Colors.white,
-                          selectedColor: const Color(0xFF6366F1),
-                          checkmarkColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            side: BorderSide(color: isSelected ? const Color(0xFF6366F1) : Colors.grey[300]!),
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                    children: ['All', 'Quarterly', 'Semi-Annually', 'Annually']
+                        .map((filter) {
+                          final isSelected = _chartFilter == filter;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: FilterChip(
+                              label: Text(
+                                filter,
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.black87,
+                                  fontSize: 13,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                              selected: isSelected,
+                              onSelected: (bool selected) {
+                                setState(() {
+                                  _chartFilter = filter;
+                                });
+                              },
+                              backgroundColor: Colors.white,
+                              selectedColor: const Color(0xFF6366F1),
+                              checkmarkColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                side: BorderSide(
+                                  color: isSelected
+                                      ? const Color(0xFF6366F1)
+                                      : Colors.grey[300]!,
+                                ),
+                              ),
+                            ),
+                          );
+                        })
+                        .toList(),
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Bar Chart Section
                 Container(
                   padding: const EdgeInsets.all(24),
@@ -438,8 +581,24 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(_chartFilter == 'All' ? 'All Payments' : 'Grouped $_chartFilter', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              Text(_chartFilter == 'All' ? 'Your upcoming half-year' : 'Your upcoming projected timeline', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                              Text(
+                                _chartFilter == 'All'
+                                    ? 'All Payments'
+                                    : 'Grouped $_chartFilter',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Text(
+                                _chartFilter == 'All'
+                                    ? 'Your upcoming half-year'
+                                    : 'Your upcoming projected timeline',
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 14,
+                                ),
+                              ),
                             ],
                           ),
                           Container(
@@ -448,8 +607,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
                               color: Colors.blue[50],
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Icon(Icons.bar_chart, color: Colors.blue),
-                          )
+                            child: const Icon(
+                              Icons.bar_chart,
+                              color: Colors.blue,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 32),
@@ -462,36 +624,50 @@ class _InsightsScreenState extends State<InsightsScreen> {
                             barTouchData: BarTouchData(
                               enabled: true,
                               touchTooltipData: BarTouchTooltipData(
-                                getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                                  Map<String, double> sums = {};
-                                  for (var item in rod.rodStackItems) {
-                                    String status = 'Payment';
-                                    if (item.color == Colors.red) {
-                                      status = 'Overdue/Default';
-                                    } else if (item.color == const Color(0xFF2E65F3)) {
-                                      status = 'Current Due';
-                                    } else {
-                                      status = 'Scheduled';
-                                    }
-                                    
-                                    sums[status] = (sums[status] ?? 0) + (item.toY - item.fromY);
-                                  }
-                                  
-                                  String tooltipText = '';
-                                  sums.forEach((key, val) {
-                                      tooltipText += '$key: ${val.toStringAsFixed(0)}\n';
-                                  });
-                                  
-                                  if (tooltipText.isNotEmpty) {
-                                    tooltipText = tooltipText.substring(0, tooltipText.length - 1);
-                                  } else {
-                                    tooltipText = rod.toY.toStringAsFixed(0);
-                                  }
-                                  return BarTooltipItem(
-                                    tooltipText,
-                                    const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                  );
-                                },
+                                getTooltipItem:
+                                    (group, groupIndex, rod, rodIndex) {
+                                      Map<String, double> sums = {};
+                                      for (var item in rod.rodStackItems) {
+                                        String status = 'Payment';
+                                        if (item.color == Colors.red) {
+                                          status = 'Overdue/Default';
+                                        } else if (item.color ==
+                                            const Color(0xFF2E65F3)) {
+                                          status = 'Current Due';
+                                        } else {
+                                          status = 'Scheduled';
+                                        }
+
+                                        sums[status] =
+                                            (sums[status] ?? 0) +
+                                            (item.toY - item.fromY);
+                                      }
+
+                                      String tooltipText = '';
+                                      sums.forEach((key, val) {
+                                        tooltipText +=
+                                            '$key: ${val.toStringAsFixed(0)}\n';
+                                      });
+
+                                      if (tooltipText.isNotEmpty) {
+                                        tooltipText = tooltipText.substring(
+                                          0,
+                                          tooltipText.length - 1,
+                                        );
+                                      } else {
+                                        tooltipText = rod.toY.toStringAsFixed(
+                                          0,
+                                        );
+                                      }
+                                      return BarTooltipItem(
+                                        tooltipText,
+                                        const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      );
+                                    },
                               ),
                             ),
                             titlesData: FlTitlesData(
@@ -499,19 +675,22 @@ class _InsightsScreenState extends State<InsightsScreen> {
                               bottomTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true,
-                                  getTitlesWidget: (double value, TitleMeta meta) {
-                                    if (value.toInt() >= labels.length) return const SizedBox.shrink();
-                                    return SideTitleWidget(
-                                      axisSide: meta.axisSide,
-                                      child: Text(
-                                        labels[value.toInt()],
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.normal,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    );
-                                  },
+                                  getTitlesWidget:
+                                      (double value, TitleMeta meta) {
+                                        if (value.toInt() >= labels.length) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return SideTitleWidget(
+                                          axisSide: meta.axisSide,
+                                          child: Text(
+                                            labels[value.toInt()],
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.normal,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        );
+                                      },
                                 ),
                               ),
                               leftTitles: AxisTitles(
@@ -524,9 +703,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                     if (value == 0) {
                                       text = '0';
                                     } else if (value >= 1000000) {
-                                      text = '${(value / 1000000).toStringAsFixed(1).replaceAll('.0', '')}M';
+                                      text =
+                                          '${(value / 1000000).toStringAsFixed(1).replaceAll('.0', '')}M';
                                     } else if (value >= 1000) {
-                                      text = '${(value / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
+                                      text =
+                                          '${(value / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
                                     } else {
                                       text = value.toStringAsFixed(0);
                                     }
@@ -534,20 +715,30 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                       axisSide: meta.axisSide,
                                       child: Text(
                                         text,
-                                        style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey,
+                                        ),
                                       ),
                                     );
                                   },
-                                )
+                                ),
                               ),
-                              rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                              rightTitles: AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              topTitles: AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
                             ),
                             gridData: FlGridData(
                               show: true,
                               drawVerticalLine: false,
                               horizontalInterval: chartMaxY / 5,
-                              getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey[200], strokeWidth: 1),
+                              getDrawingHorizontalLine: (value) => FlLine(
+                                color: Colors.grey[200],
+                                strokeWidth: 1,
+                              ),
                             ),
                             borderData: FlBorderData(show: false),
                             barGroups: barGroups,
@@ -555,9 +746,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Wrap(
-                        children: barLegendItems,
-                      ),
+                      Wrap(children: barLegendItems),
                       const SizedBox(height: 24),
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -567,12 +756,24 @@ class _InsightsScreenState extends State<InsightsScreen> {
                         ),
                         child: Row(
                           children: const [
-                            Icon(Icons.info_outline, size: 16, color: Colors.black54),
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Colors.black54,
+                            ),
                             SizedBox(width: 8),
-                            Expanded(child: Text('Your payment forecast is dynamically calculated from your active installments.', style: TextStyle(color: Colors.black54, fontSize: 12))),
+                            Expanded(
+                              child: Text(
+                                'Your payment forecast is dynamically calculated from your active installments.',
+                                style: TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
-                      )
+                      ),
                     ],
                   ),
                 ),
@@ -581,11 +782,21 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
                 // Donut Chart Sections
                 if (shortTermTotals.isNotEmpty) ...[
-                  _buildDonutChart('Retail Cash Flow', 'Based on active short-term obligations', shortTermTotals, shortTermDebt),
+                  _buildDonutChart(
+                    'Retail Cash Flow',
+                    'Based on active short-term obligations',
+                    shortTermTotals,
+                    shortTermDebt,
+                  ),
                   const SizedBox(height: 24),
                 ],
                 if (longTermTotals.isNotEmpty) ...[
-                  _buildDonutChart('Asset Cash Flow', 'Based on active long-term assets', longTermTotals, longTermDebt),
+                  _buildDonutChart(
+                    'Asset Cash Flow',
+                    'Based on active long-term assets',
+                    longTermTotals,
+                    longTermDebt,
+                  ),
                 ],
               ],
             ),
@@ -598,13 +809,24 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // ---------------------------------------------------------------------------
   // Donut Chart Widget Helper
   // ---------------------------------------------------------------------------
-  Widget _buildDonutChart(String title, String subtitle, Map<String, double> categoryTotals, double totalDebt) {
+  Widget _buildDonutChart(
+    String title,
+    String subtitle,
+    Map<String, double> categoryTotals,
+    double totalDebt,
+  ) {
     List<PieChartSectionData> pieSections = [];
     List<Widget> legendItems = [];
-    
-    List<Color> colors = [Colors.blue, Colors.purple, Colors.redAccent, Colors.green, Colors.orange];
+
+    List<Color> colors = [
+      Colors.blue,
+      Colors.purple,
+      Colors.redAccent,
+      Colors.green,
+      Colors.orange,
+    ];
     int cIdx = 0;
-    
+
     categoryTotals.forEach((category, amount) {
       double percentage = (amount / totalDebt) * 100;
       Color color = colors[cIdx % colors.length];
@@ -628,10 +850,16 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   Container(
                     width: 12,
                     height: 12,
-                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  Text(category, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Text(
+                    category,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ],
               ),
               Text('${percentage.toStringAsFixed(0)}%'),
@@ -658,8 +886,17 @@ class _InsightsScreenState extends State<InsightsScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
                 ],
               ),
               Container(
@@ -669,7 +906,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.pie_chart_outline, color: Colors.blue),
-              )
+              ),
             ],
           ),
           const SizedBox(height: 32),
@@ -690,7 +927,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   children: [
                     Text(
                       '${categoryTotals.keys.length}',
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const Text(
                       'Categories',
@@ -702,9 +942,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
             ),
           ),
           const SizedBox(height: 32),
-          Column(
-            children: legendItems,
-          )
+          Column(children: legendItems),
         ],
       ),
     );
@@ -716,12 +954,17 @@ class _InsightsScreenState extends State<InsightsScreen> {
   Widget _buildAdvisorCard(UserAccount user, List<Installment> installments) {
     final format = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
     final DateTime now = TimeService.now();
-    final DateRange cycle =
-        AffordabilityEngine.getCurrentBillingCycle(user.salaryDay, now);
+    final DateRange cycle = AffordabilityEngine.getCurrentBillingCycle(
+      user.salaryDay,
+      now,
+    );
 
     // Real-time safe-to-spend (resets on incomeDepositDay automatically)
     final double safeToSpend = AffordabilityEngine.calculateSafeToSpend(
-        installments, user.monthlyIncome, user.salaryDay);
+      installments,
+      user.monthlyIncome,
+      user.salaryDay,
+    );
 
     // Breakdown for the detail line
     final double owed = AffordabilityEngine.getOwedInCycle(installments, cycle);
@@ -738,9 +981,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
     // Emergency override: if safeToSpend goes negative, escalate to critical
     final bool isOverBudget = safeToSpend < 0;
-    final Color accentColor = isOverBudget ? const Color(0xFFE74C3C) : status.tierColor;
-    final Color cardBg      = isOverBudget ? const Color(0xFFFFF0F0) : status.bgColor;
-    final IconData icon     = isOverBudget
+    final Color accentColor = isOverBudget
+        ? const Color(0xFFE74C3C)
+        : status.tierColor;
+    final Color cardBg = isOverBudget
+        ? const Color(0xFFFFF0F0)
+        : status.bgColor;
+    final IconData icon = isOverBudget
         ? Icons.warning_amber_rounded
         : Icons.account_balance_wallet_outlined;
 

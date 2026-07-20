@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
-import '../../../main.dart'; 
+import '../models/user_role.dart';
+import '../widgets/role_toggle.dart';
+import '../../merchant/screens/merchant_dashboard_screen.dart';
+import '../../../main.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -16,22 +19,24 @@ class _SignupScreenState extends State<SignupScreen> {
   final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
   bool _obscureText = true;
+  UserRole _selectedRole = UserRole.consumer;
 
   Future<void> _handleSignup() async {
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Passwords do not match.')));
       return;
     }
 
     setState(() => _isLoading = true);
-    
+
     // Attempt signup (bypasses in kDebugMode)
     bool success = await AuthService.signUpWithEmail(
       _nameController.text,
-      _emailController.text, 
-      _passwordController.text
+      _emailController.text,
+      _passwordController.text,
+      role: _selectedRole,
     );
 
     setState(() => _isLoading = false);
@@ -39,8 +44,12 @@ class _SignupScreenState extends State<SignupScreen> {
     if (success && mounted) {
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const MainNavigation()),
-        (route) => false, 
+        MaterialPageRoute(
+          builder: (_) => _selectedRole == UserRole.merchant
+              ? const MerchantDashboardScreen()
+              : const MainNavigation(),
+        ),
+        (route) => false,
       );
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -77,31 +86,54 @@ class _SignupScreenState extends State<SignupScreen> {
                 'Sign up to track your installments securely.',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              RoleToggle(
+                selected: _selectedRole,
+                onChanged: (role) => setState(() => _selectedRole = role),
+              ),
+              const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
-                  ]
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const Text(
+                      'Full Name',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _nameController,
                       decoration: InputDecoration(
                         hintText: 'John Doe',
                         prefixIcon: const Icon(Icons.person_outline),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text('Email Address', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const Text(
+                      'Email Address',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _emailController,
@@ -109,11 +141,19 @@ class _SignupScreenState extends State<SignupScreen> {
                       decoration: InputDecoration(
                         hintText: 'name@example.com',
                         prefixIcon: const Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text('Password', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const Text(
+                      'Password',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _passwordController,
@@ -122,14 +162,27 @@ class _SignupScreenState extends State<SignupScreen> {
                         hintText: '••••••••',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscureText ? Icons.visibility_off : Icons.visibility),
-                          onPressed: () => setState(() => _obscureText = !_obscureText),
+                          icon: Icon(
+                            _obscureText
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
+                          onPressed: () =>
+                              setState(() => _obscureText = !_obscureText),
                         ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text('Confirm Password', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const Text(
+                      'Confirm Password',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _confirmPasswordController,
@@ -137,7 +190,9 @@ class _SignupScreenState extends State<SignupScreen> {
                       decoration: InputDecoration(
                         hintText: '••••••••',
                         prefixIcon: const Icon(Icons.lock_outline),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -149,11 +204,26 @@ class _SignupScreenState extends State<SignupScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.black,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
-                        child: _isLoading 
-                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Text('Sign Up', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Sign Up',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
                       ),
                     ),
                   ],

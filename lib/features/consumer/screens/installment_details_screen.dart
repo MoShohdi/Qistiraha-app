@@ -15,11 +15,15 @@ class InstallmentDetailsScreen extends StatefulWidget {
   const InstallmentDetailsScreen({super.key, required this.installment});
 
   @override
-  State<InstallmentDetailsScreen> createState() => _InstallmentDetailsScreenState();
+  State<InstallmentDetailsScreen> createState() =>
+      _InstallmentDetailsScreenState();
 }
 
 class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
-  final currencyFormatter = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 2);
+  final currencyFormatter = NumberFormat.currency(
+    symbol: 'EGP ',
+    decimalDigits: 2,
+  );
   bool _isByDate = true;
   DateTime? _desiredPayoffDate;
   double _newMonthlyPayment = 0.0;
@@ -27,14 +31,15 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
 
   void _applyNewPlan() async {
     widget.installment.monthlyPayment = _newMonthlyPayment;
-    widget.installment.totalMonths = widget.installment.paidMonths + _calculatedMonthsToPayoff;
+    widget.installment.totalMonths =
+        widget.installment.paidMonths + _calculatedMonthsToPayoff;
     await widget.installment.save(); // Save to Hive
 
     setState(() {
       _newMonthlyPayment = 0.0;
       _desiredPayoffDate = null;
     });
-    
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Installment plan updated successfully')),
@@ -47,7 +52,9 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Installment'),
-        content: const Text('Are you sure you want to delete this installment? This action cannot be undone.'),
+        content: const Text(
+          'Are you sure you want to delete this installment? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -68,13 +75,15 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
         user.installments?.remove(widget.installment);
         await user.save();
       }
-      
+
       await widget.installment.delete();
-      
+
       if (mounted) {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const DeleteAnimationScreen()),
+          MaterialPageRoute(
+            builder: (context) => const DeleteAnimationScreen(),
+          ),
         );
       }
     }
@@ -82,16 +91,19 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
 
   void _calculateEarlyPayoff() {
     if (_desiredPayoffDate == null) return;
-    
-    int remainingMonths = widget.installment.totalMonths - widget.installment.paidMonths;
+
+    int remainingMonths =
+        widget.installment.totalMonths - widget.installment.paidMonths;
     double remainingDebt = remainingMonths * widget.installment.monthlyPayment;
-    
+
     // Calculate months between now and desired payoff date
-    int monthsToPayoff = (_desiredPayoffDate!.year - TimeService.now().year) * 12 + 
-                         _desiredPayoffDate!.month - TimeService.now().month;
-                         
+    int monthsToPayoff =
+        (_desiredPayoffDate!.year - TimeService.now().year) * 12 +
+        _desiredPayoffDate!.month -
+        TimeService.now().month;
+
     if (monthsToPayoff <= 0) monthsToPayoff = 1;
-    
+
     setState(() {
       _newMonthlyPayment = remainingDebt / monthsToPayoff;
       _calculatedMonthsToPayoff = monthsToPayoff;
@@ -123,9 +135,9 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to pick image: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to pick image: $e')));
       }
     }
   }
@@ -144,7 +156,10 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             children: [
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text('Add Warranty Photo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                child: Text(
+                  'Add Warranty Photo',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.camera_alt_outlined),
@@ -172,9 +187,12 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    int remainingMonths = widget.installment.totalMonths - widget.installment.paidMonths;
+    int remainingMonths =
+        widget.installment.totalMonths - widget.installment.paidMonths;
     double remainingDebt = remainingMonths * widget.installment.monthlyPayment;
-    PenaltyResult penaltyResult = PenaltyEngine.calculateLateFees(widget.installment);
+    PenaltyResult penaltyResult = PenaltyEngine.calculateLateFees(
+      widget.installment,
+    );
     remainingDebt += penaltyResult.lateFee;
 
     return Scaffold(
@@ -197,7 +215,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
           IconButton(
             icon: const Icon(Icons.notifications_active, color: Colors.black),
             onPressed: () {},
-          )
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -228,7 +246,10 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   foregroundColor: Colors.red,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: const Text('Delete Installment', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Delete Installment',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             const SizedBox(height: 32),
@@ -257,7 +278,12 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
         children: [
           Text(
             label,
-            style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -283,26 +309,41 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
         children: [
           const Text(
             'REMAINING DEBT',
-            style: TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            style: TextStyle(
+              color: Colors.black87,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             currencyFormatter.format(remainingDebt),
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.blueGrey[800]),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              color: Colors.blueGrey[800],
+            ),
           ),
           const SizedBox(height: 16),
           if (widget.installment.totalPayments <= 20)
             Row(
-              children: List.generate(widget.installment.totalPayments, (index) {
+              children: List.generate(widget.installment.totalPayments, (
+                index,
+              ) {
                 int paidSegments = widget.installment.paidPayments;
                 int totalSegments = widget.installment.totalPayments;
                 int redSegments = 0;
 
-                PenaltyResult pr = PenaltyEngine.calculateLateFees(widget.installment);
+                PenaltyResult pr = PenaltyEngine.calculateLateFees(
+                  widget.installment,
+                );
                 if (pr.isAccelerated) {
                   redSegments = totalSegments - paidSegments;
                 } else {
-                  redSegments = PenaltyEngine.calculateUncappedMissedPeriods(widget.installment);
+                  redSegments = PenaltyEngine.calculateUncappedMissedPeriods(
+                    widget.installment,
+                  );
                   if (redSegments > (totalSegments - paidSegments)) {
                     redSegments = totalSegments - paidSegments;
                   }
@@ -320,7 +361,9 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                 return Expanded(
                   child: Container(
                     height: 8,
-                    margin: EdgeInsets.only(right: index == totalSegments - 1 ? 0 : 4),
+                    margin: EdgeInsets.only(
+                      right: index == totalSegments - 1 ? 0 : 4,
+                    ),
                     decoration: BoxDecoration(
                       color: segmentColor,
                       borderRadius: BorderRadius.circular(4),
@@ -333,7 +376,10 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
-                value: widget.installment.totalPayments > 0 ? widget.installment.paidPayments / widget.installment.totalPayments : 0.0,
+                value: widget.installment.totalPayments > 0
+                    ? widget.installment.paidPayments /
+                          widget.installment.totalPayments
+                    : 0.0,
                 backgroundColor: Colors.grey[200],
                 color: Theme.of(context).primaryColor,
                 minHeight: 8,
@@ -353,15 +399,22 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
   }
 
   Widget _buildDebtPaidCard() {
-    double totalPaid = widget.installment.pastPayments.fold(0.0, (sum, p) => sum + p);
+    double totalPaid = widget.installment.pastPayments.fold(
+      0.0,
+      (sum, p) => sum + p,
+    );
     double totalPenalty = widget.installment.pastPayments.fold(0.0, (sum, p) {
-      return sum + (p > widget.installment.monthlyPayment ? (p - widget.installment.monthlyPayment) : 0.0);
+      return sum +
+          (p > widget.installment.monthlyPayment
+              ? (p - widget.installment.monthlyPayment)
+              : 0.0);
     });
     double totalRegular = totalPaid - totalPenalty;
-    
+
     // Fallback if no pastPayments stored (for legacy test data)
     if (totalPaid == 0 && widget.installment.paidMonths > 0) {
-      totalPaid = widget.installment.paidMonths * widget.installment.monthlyPayment;
+      totalPaid =
+          widget.installment.paidMonths * widget.installment.monthlyPayment;
       totalRegular = totalPaid;
     }
 
@@ -382,12 +435,21 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
         children: [
           const Text(
             'DEBT PAID',
-            style: TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            style: TextStyle(
+              color: Colors.black87,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             currencyFormatter.format(totalPaid),
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.blueGrey[800]),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              color: Colors.blueGrey[800],
+            ),
           ),
           const SizedBox(height: 16),
           ClipRRect(
@@ -407,9 +469,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                       child: Container(color: Colors.redAccent),
                     ),
                   if (regularRatio == 0 && penaltyRatio == 0)
-                    Expanded(
-                      child: Container(color: Colors.grey[200]),
-                    )
+                    Expanded(child: Container(color: Colors.grey[200])),
                 ],
               ),
             ),
@@ -421,10 +481,13 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               if (penaltyRatio > 0)
                 Text(
                   'Includes ${currencyFormatter.format(totalPenalty)} penalties',
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              if (penaltyRatio == 0)
-                const SizedBox(),
+              if (penaltyRatio == 0) const SizedBox(),
               Text(
                 '${widget.installment.paidPayments} of ${widget.installment.totalPayments} paid',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
@@ -446,7 +509,10 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isAccelerated ? Colors.red : Colors.grey[200]!, width: isAccelerated ? 2 : 1),
+        border: Border.all(
+          color: isAccelerated ? Colors.red : Colors.grey[200]!,
+          width: isAccelerated ? 2 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -459,7 +525,11 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                 Expanded(
                   child: Text(
                     '⚠️ DEFAULT STATUS: ENTIRE BALANCE DUE',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ],
@@ -470,7 +540,12 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             children: [
               const Text(
                 'MONTHLY PAYMENT',
-                style: TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
               ),
               const SizedBox(width: 8),
               Container(
@@ -479,8 +554,15 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   color: const Color(0xFF1E2337),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text('FIXED', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-              )
+                child: const Text(
+                  'FIXED',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -488,7 +570,10 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                currencyFormatter.format(widget.installment.monthlyPayment * PenaltyEngine.calculateMissedMonths(widget.installment)),
+                currencyFormatter.format(
+                  widget.installment.monthlyPayment *
+                      PenaltyEngine.calculateMissedMonths(widget.installment),
+                ),
                 style: const TextStyle(
                   fontSize: 16,
                   color: Colors.grey,
@@ -500,16 +585,24 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             fit: BoxFit.scaleDown,
             child: Text(
               currencyFormatter.format(
-                isAccelerated 
-                  ? ((widget.installment.totalPayments - widget.installment.paidPayments) * widget.installment.monthlyPayment)
-                  : widget.installment.statusEnum == InstallmentStatus.overdue
-                    ? (widget.installment.monthlyPayment * PenaltyEngine.calculateUncappedMissedPeriods(widget.installment))
-                    : widget.installment.monthlyPayment
+                isAccelerated
+                    ? ((widget.installment.totalPayments -
+                              widget.installment.paidPayments) *
+                          widget.installment.monthlyPayment)
+                    : widget.installment.statusEnum == InstallmentStatus.overdue
+                    ? (widget.installment.monthlyPayment *
+                          PenaltyEngine.calculateUncappedMissedPeriods(
+                            widget.installment,
+                          ))
+                    : widget.installment.monthlyPayment,
               ),
               style: TextStyle(
-                fontSize: 24, 
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: widget.installment.statusEnum == InstallmentStatus.overdue ? Colors.red : Colors.black,
+                color:
+                    widget.installment.statusEnum == InstallmentStatus.overdue
+                    ? Colors.red
+                    : Colors.black,
               ),
             ),
           ),
@@ -519,12 +612,20 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 14),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.redAccent,
+                    size: 14,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       'Please contact your lender for late fees details.',
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                       softWrap: true,
                     ),
                   ),
@@ -545,42 +646,70 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
           if (widget.installment.statusEnum != InstallmentStatus.paid) ...[
             const SizedBox(height: 20),
             (() {
-              int regularPeriodsToPay = PenaltyEngine.calculateActualPeriodsToPay(widget.installment);
-              if (widget.installment.paidPayments + regularPeriodsToPay > widget.installment.totalPayments) {
-                regularPeriodsToPay = widget.installment.totalPayments - widget.installment.paidPayments;
+              int regularPeriodsToPay =
+                  PenaltyEngine.calculateActualPeriodsToPay(widget.installment);
+              if (widget.installment.paidPayments + regularPeriodsToPay >
+                  widget.installment.totalPayments) {
+                regularPeriodsToPay =
+                    widget.installment.totalPayments -
+                    widget.installment.paidPayments;
               }
-              double regularTransactionCost = (widget.installment.monthlyPayment * regularPeriodsToPay) + lateFee;
+              double regularTransactionCost =
+                  (widget.installment.monthlyPayment * regularPeriodsToPay) +
+                  lateFee;
 
-              int fullPeriodsToPay = widget.installment.totalPayments - widget.installment.paidPayments;
-              double fullTransactionCost = (widget.installment.monthlyPayment * fullPeriodsToPay) + lateFee;
+              int fullPeriodsToPay =
+                  widget.installment.totalPayments -
+                  widget.installment.paidPayments;
+              double fullTransactionCost =
+                  (widget.installment.monthlyPayment * fullPeriodsToPay) +
+                  lateFee;
 
               Future<void> pay(int periodsToPay) async {
-                if (widget.installment.paidPayments < widget.installment.totalPayments) {
+                if (widget.installment.paidPayments <
+                    widget.installment.totalPayments) {
                   double evenlyDistributedPenalty = lateFee / periodsToPay;
                   for (int i = 0; i < periodsToPay; i++) {
-                    widget.installment.pastPayments = List.from(widget.installment.pastPayments)..add(widget.installment.monthlyPayment + evenlyDistributedPenalty);
+                    widget.installment.pastPayments =
+                        List.from(widget.installment.pastPayments)..add(
+                          widget.installment.monthlyPayment +
+                              evenlyDistributedPenalty,
+                        );
                   }
-                  
-                  int monthsToAdvance = periodsToPay * widget.installment.monthsPerPayment;
+
+                  int monthsToAdvance =
+                      periodsToPay * widget.installment.monthsPerPayment;
                   widget.installment.paidMonths += monthsToAdvance;
-                  widget.installment.dueDate = DateTime(widget.installment.dueDate.year, widget.installment.dueDate.month + monthsToAdvance, widget.installment.dueDate.day);
-                  
-                  if (widget.installment.paidPayments >= widget.installment.totalPayments) {
+                  widget.installment.dueDate = DateTime(
+                    widget.installment.dueDate.year,
+                    widget.installment.dueDate.month + monthsToAdvance,
+                    widget.installment.dueDate.day,
+                  );
+
+                  if (widget.installment.paidPayments >=
+                      widget.installment.totalPayments) {
                     widget.installment.statusEnum = InstallmentStatus.paid;
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Installment fully paid! Moved to History tab. 🎉'),
+                          content: Text(
+                            'Installment fully paid! Moved to History tab. 🎉',
+                          ),
                           backgroundColor: Colors.green,
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
-                      Navigator.pop(context); // Go back to home to see the animation/result
+                      Navigator.pop(
+                        context,
+                      ); // Go back to home to see the animation/result
                     }
-                  } else if (widget.installment.statusEnum == InstallmentStatus.overdue && widget.installment.dueDate.isAfter(TimeService.now())) {
+                  } else if (widget.installment.statusEnum ==
+                          InstallmentStatus.overdue &&
+                      widget.installment.dueDate.isAfter(TimeService.now())) {
                     widget.installment.statusEnum = InstallmentStatus.active;
                   }
-                  widget.installment.lastPaidAt = TimeService.now(); // stamp payment time for billing cycle tracking
+                  widget.installment.lastPaidAt =
+                      TimeService.now(); // stamp payment time for billing cycle tracking
                   await widget.installment.save();
                   setState(() {});
                 }
@@ -612,10 +741,17 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                               TextSpan(
                                 text: regularPeriodsToPay > 1
                                     ? 'Pay $regularPeriodsToPay Arrears\n'
-                                    : 'Mark ${widget.installment.paymentFrequency == 'Monthly' ? 'Month' : widget.installment.paymentFrequency == 'Quarterly' ? 'Quarter' : widget.installment.paymentFrequency == 'Semi-Annually' ? 'Half-Year' : 'Year'} as Paid\n',
+                                    : 'Mark ${widget.installment.paymentFrequency == 'Monthly'
+                                          ? 'Month'
+                                          : widget.installment.paymentFrequency == 'Quarterly'
+                                          ? 'Quarter'
+                                          : widget.installment.paymentFrequency == 'Semi-Annually'
+                                          ? 'Half-Year'
+                                          : 'Year'} as Paid\n',
                               ),
                               TextSpan(
-                                text: '(${currencyFormatter.format(regularTransactionCost)})',
+                                text:
+                                    '(${currencyFormatter.format(regularTransactionCost)})',
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
                                   fontWeight: FontWeight.normal,
@@ -650,7 +786,8 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                             children: [
                               const TextSpan(text: 'Settle Full Debt\n'),
                               TextSpan(
-                                text: '(${currencyFormatter.format(fullTransactionCost)})',
+                                text:
+                                    '(${currencyFormatter.format(fullTransactionCost)})',
                                 style: TextStyle(
                                   color: Colors.red.shade100,
                                   fontWeight: FontWeight.normal,
@@ -687,12 +824,19 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                         ),
                         children: [
                           TextSpan(
-                                text: regularPeriodsToPay > 1
-                                    ? 'Pay $regularPeriodsToPay Arrears\n'
-                                    : 'Mark ${widget.installment.paymentFrequency == 'Monthly' ? 'Month' : widget.installment.paymentFrequency == 'Quarterly' ? 'Quarter' : widget.installment.paymentFrequency == 'Semi-Annually' ? 'Half-Year' : 'Year'} as Paid\n',
+                            text: regularPeriodsToPay > 1
+                                ? 'Pay $regularPeriodsToPay Arrears\n'
+                                : 'Mark ${widget.installment.paymentFrequency == 'Monthly'
+                                      ? 'Month'
+                                      : widget.installment.paymentFrequency == 'Quarterly'
+                                      ? 'Quarter'
+                                      : widget.installment.paymentFrequency == 'Semi-Annually'
+                                      ? 'Half-Year'
+                                      : 'Year'} as Paid\n',
                           ),
                           TextSpan(
-                            text: '(${currencyFormatter.format(regularTransactionCost)})',
+                            text:
+                                '(${currencyFormatter.format(regularTransactionCost)})',
                             style: TextStyle(
                               color: Colors.grey.shade600,
                               fontWeight: FontWeight.normal,
@@ -726,7 +870,12 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
         children: [
           const Text(
             'WARRANTY & RECEIPT',
-            style: TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            style: TextStyle(
+              color: Colors.black87,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
           ),
           const SizedBox(height: 16),
           if (widget.installment.warrantyImagePath == null)
@@ -742,7 +891,11 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.camera_alt_outlined, color: Colors.grey[500], size: 32),
+                    Icon(
+                      Icons.camera_alt_outlined,
+                      color: Colors.grey[500],
+                      size: 32,
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'Tap to add warranty photo',
@@ -769,7 +922,13 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Document Saved', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      const Text(
+                        'Document Saved',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -783,15 +942,33 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                                     child: Stack(
                                       children: [
                                         ClipRRect(
-                                          borderRadius: BorderRadius.circular(16),
-                                          child: Image.file(File(widget.installment.warrantyImagePath!)),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          child: Image.file(
+                                            File(
+                                              widget
+                                                  .installment
+                                                  .warrantyImagePath!,
+                                            ),
+                                          ),
                                         ),
                                         Positioned(
                                           top: 8,
                                           right: 8,
                                           child: IconButton(
-                                            icon: const Icon(Icons.close, color: Colors.white, shadows: [Shadow(color: Colors.black45, blurRadius: 4)]),
-                                            onPressed: () => Navigator.pop(context),
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: Colors.white,
+                                              shadows: [
+                                                Shadow(
+                                                  color: Colors.black45,
+                                                  blurRadius: 4,
+                                                ),
+                                              ],
+                                            ),
+                                            onPressed: () =>
+                                                Navigator.pop(context),
                                           ),
                                         ),
                                       ],
@@ -799,10 +976,22 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                                   ),
                                 );
                               },
-                              icon: const Icon(Icons.fullscreen, size: 16, color: Colors.black),
-                              label: const Text('View', style: TextStyle(color: Colors.black, fontSize: 12)),
+                              icon: const Icon(
+                                Icons.fullscreen,
+                                size: 16,
+                                color: Colors.black,
+                              ),
+                              label: const Text(
+                                'View',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 12,
+                                ),
+                              ),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
                                 side: BorderSide(color: Colors.grey[300]!),
                               ),
                             ),
@@ -814,16 +1003,28 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                                 bool? confirm = await showDialog<bool>(
                                   context: context,
                                   builder: (context) => AlertDialog(
-                                    title: const Text('Remove Warranty Document'),
-                                    content: const Text('Are you sure you want to remove this image? This action cannot be undone.'),
+                                    title: const Text(
+                                      'Remove Warranty Document',
+                                    ),
+                                    content: const Text(
+                                      'Are you sure you want to remove this image? This action cannot be undone.',
+                                    ),
                                     actions: [
                                       TextButton(
-                                        onPressed: () => Navigator.pop(context, false),
-                                        child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text(
+                                          'Cancel',
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
                                       ),
                                       TextButton(
-                                        onPressed: () => Navigator.pop(context, true),
-                                        child: const Text('Remove', style: TextStyle(color: Colors.red)),
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text(
+                                          'Remove',
+                                          style: TextStyle(color: Colors.red),
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -835,10 +1036,22 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                                   setState(() {});
                                 }
                               },
-                              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                              label: const Text('Remove', style: TextStyle(color: Colors.red, fontSize: 12)),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 16,
+                                color: Colors.red,
+                              ),
+                              label: const Text(
+                                'Remove',
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 12,
+                                ),
+                              ),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
                                 side: const BorderSide(color: Colors.red),
                               ),
                             ),
@@ -857,23 +1070,25 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
 
   Widget _buildPaymentHistory() {
     List<Widget> historyItems = [];
-    
+
     // Add upcoming payment
     if (widget.installment.paidMonths < widget.installment.totalMonths) {
       double upcomingAmount = widget.installment.monthlyPayment;
       PenaltyResult pr = PenaltyEngine.calculateLateFees(widget.installment);
       double lateFee = pr.lateFee;
       upcomingAmount += lateFee;
-      
-      historyItems.add(_buildHistoryItem(
-        'Payment ${widget.installment.paidMonths + 1}',
-        widget.installment.dueDate,
-        upcomingAmount,
-        lateFee > 0 ? 'LATE' : 'UPCOMING',
-        lateFee > 0 ? Colors.red[50]! : Colors.grey[200]!,
-        lateFee > 0 ? Colors.red : Colors.black,
-        lateFee > 0 ? Icons.warning_amber_rounded : Icons.access_time
-      ));
+
+      historyItems.add(
+        _buildHistoryItem(
+          'Payment ${widget.installment.paidMonths + 1}',
+          widget.installment.dueDate,
+          upcomingAmount,
+          lateFee > 0 ? 'LATE' : 'UPCOMING',
+          lateFee > 0 ? Colors.red[50]! : Colors.grey[200]!,
+          lateFee > 0 ? Colors.red : Colors.black,
+          lateFee > 0 ? Icons.warning_amber_rounded : Icons.access_time,
+        ),
+      );
       if (widget.installment.paidMonths > 0) {
         historyItems.add(const SizedBox(height: 16));
       }
@@ -885,20 +1100,24 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
       if (i < widget.installment.pastPayments.length) {
         amount = widget.installment.pastPayments[i];
       }
-      
-      DateTime pastDate = widget.installment.dueDate.subtract(Duration(days: 30 * (widget.installment.paidMonths - i)));
+
+      DateTime pastDate = widget.installment.dueDate.subtract(
+        Duration(days: 30 * (widget.installment.paidMonths - i)),
+      );
       bool wasLate = amount > widget.installment.monthlyPayment;
 
-      historyItems.add(_buildHistoryItem(
-        'Payment ${i + 1}',
-        pastDate,
-        amount,
-        wasLate ? 'PAID (LATE)' : 'PAID',
-        wasLate ? Colors.red[50]! : Colors.green[50]!,
-        wasLate ? Colors.red : Colors.green,
-        wasLate ? Icons.warning_rounded : Icons.check_circle
-      ));
-      
+      historyItems.add(
+        _buildHistoryItem(
+          'Payment ${i + 1}',
+          pastDate,
+          amount,
+          wasLate ? 'PAID (LATE)' : 'PAID',
+          wasLate ? Colors.red[50]! : Colors.green[50]!,
+          wasLate ? Colors.red : Colors.green,
+          wasLate ? Icons.warning_rounded : Icons.check_circle,
+        ),
+      );
+
       if (i > 0) {
         historyItems.add(const SizedBox(height: 16));
       }
@@ -922,8 +1141,14 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
-              Text('Payment History', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              Text('View All', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(
+                'Payment History',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              Text(
+                'View All',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -933,7 +1158,15 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     );
   }
 
-  Widget _buildHistoryItem(String title, DateTime date, double amount, String status, Color statusBg, Color statusText, IconData icon) {
+  Widget _buildHistoryItem(
+    String title,
+    DateTime date,
+    double amount,
+    String status,
+    Color statusBg,
+    Color statusText,
+    IconData icon,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -957,9 +1190,18 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text('Due: ${DateFormat('dd/MM/yyyy').format(date)}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                  Text(
+                    'Due: ${DateFormat('dd/MM/yyyy').format(date)}',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
                 ],
               ),
             ],
@@ -967,7 +1209,13 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(currencyFormatter.format(amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(
+                currencyFormatter.format(amount),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -975,7 +1223,14 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   color: statusBg,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(status, style: TextStyle(color: statusText, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    color: statusText,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
@@ -996,11 +1251,17 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Early Payoff Calculator', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text(
+            'Early Payoff Calculator',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
           const SizedBox(height: 8),
-          const Text('Simulate early settlement terms.', style: TextStyle(color: Colors.grey, fontSize: 14)),
+          const Text(
+            'Simulate early settlement terms.',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
           const SizedBox(height: 24),
-          
+
           Row(
             children: [
               Expanded(
@@ -1010,11 +1271,22 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
                       color: _isByDate ? Colors.white : Colors.grey[100],
-                      border: Border.all(color: _isByDate ? Colors.grey[300]! : Colors.transparent),
+                      border: Border.all(
+                        color: _isByDate
+                            ? Colors.grey[300]!
+                            : Colors.transparent,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     alignment: Alignment.center,
-                    child: Text('By Date', style: TextStyle(fontWeight: _isByDate ? FontWeight.bold : FontWeight.normal)),
+                    child: Text(
+                      'By Date',
+                      style: TextStyle(
+                        fontWeight: _isByDate
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1026,25 +1298,42 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
                       color: !_isByDate ? Colors.white : Colors.grey[100],
-                      border: Border.all(color: !_isByDate ? Colors.grey[300]! : Colors.transparent),
+                      border: Border.all(
+                        color: !_isByDate
+                            ? Colors.grey[300]!
+                            : Colors.transparent,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     alignment: Alignment.center,
-                    child: Text('By Amount', style: TextStyle(fontWeight: !_isByDate ? FontWeight.bold : FontWeight.normal)),
+                    child: Text(
+                      'By Amount',
+                      style: TextStyle(
+                        fontWeight: !_isByDate
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-          
+
           const SizedBox(height: 24),
           if (_isByDate) ...[
-            const Text('Desired Payoff Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const Text(
+              'Desired Payoff Date',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
             const SizedBox(height: 8),
             GestureDetector(
               onTap: () => _selectDate(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   border: Border.all(color: Colors.grey[300]!),
@@ -1054,10 +1343,20 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      _desiredPayoffDate != null ? DateFormat('dd/MM/yyyy').format(_desiredPayoffDate!) : 'dd/mm/yyyy',
-                      style: TextStyle(color: _desiredPayoffDate != null ? Colors.black : Colors.grey[400]),
+                      _desiredPayoffDate != null
+                          ? DateFormat('dd/MM/yyyy').format(_desiredPayoffDate!)
+                          : 'dd/mm/yyyy',
+                      style: TextStyle(
+                        color: _desiredPayoffDate != null
+                            ? Colors.black
+                            : Colors.grey[400],
+                      ),
                     ),
-                    const Icon(Icons.calendar_today, color: Colors.grey, size: 20),
+                    const Icon(
+                      Icons.calendar_today,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
                   ],
                 ),
               ),
@@ -1075,7 +1374,10 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text('Calculate New Payment', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Calculate New Payment',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             if (_newMonthlyPayment > 0) ...[
@@ -1092,12 +1394,26 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   children: [
                     RichText(
                       text: TextSpan(
-                        style: const TextStyle(color: Colors.black87, fontSize: 14, height: 1.5),
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
                         children: [
                           const TextSpan(text: 'To pay off by '),
-                          TextSpan(text: DateFormat('dd/MM/yyyy').format(_desiredPayoffDate!), style: const TextStyle(fontWeight: FontWeight.bold)),
-                          const TextSpan(text: ', your new monthly payment will be '),
-                          TextSpan(text: currencyFormatter.format(_newMonthlyPayment), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          TextSpan(
+                            text: DateFormat(
+                              'dd/MM/yyyy',
+                            ).format(_desiredPayoffDate!),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const TextSpan(
+                            text: ', your new monthly payment will be ',
+                          ),
+                          TextSpan(
+                            text: currencyFormatter.format(_newMonthlyPayment),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           const TextSpan(text: '.'),
                         ],
                       ),
@@ -1108,23 +1424,28 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                       child: ElevatedButton(
                         onPressed: _applyNewPlan,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2E65F3), // Match brand blue
+                          backgroundColor: const Color(
+                            0xFF2E65F3,
+                          ), // Match brand blue
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text('Apply to Plan', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: const Text(
+                          'Apply to Plan',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ],
                 ),
-              )
-            ]
+              ),
+            ],
           ] else ...[
-            const Center(child: Text("By Amount simulation is coming soon."))
-          ]
+            const Center(child: Text("By Amount simulation is coming soon.")),
+          ],
         ],
       ),
     );

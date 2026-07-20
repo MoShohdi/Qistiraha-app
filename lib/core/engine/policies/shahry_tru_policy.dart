@@ -20,7 +20,8 @@ class ShahryTruPolicy implements LateFeePolicy {
   ) {
     // Acceleration clause
     if (uncappedMissedMonths >= 2) {
-      double entireRemainingPrincipal = remainingInstallments * inst.monthlyPayment;
+      double entireRemainingPrincipal =
+          remainingInstallments * inst.monthlyPayment;
       return PenaltyResult(
         lateFee: entireRemainingPrincipal * 0.15,
         isAccelerated: true,

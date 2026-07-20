@@ -1,6 +1,8 @@
+import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/auth/models/user_account.dart';
+import 'package:qistiraha/features/auth/models/business_account.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/core/services/hive_service.dart';
 
@@ -56,7 +58,9 @@ class AddInstallmentController {
   String? validatePositiveInt(String? value, String fieldName) {
     if (value == null || value.trim().isEmpty) return '$fieldName is required';
     final n = int.tryParse(value);
-    if (n == null || n <= 0) return '$fieldName must be a whole number greater than 0';
+    if (n == null || n <= 0) {
+      return '$fieldName must be a whole number greater than 0';
+    }
     return null;
   }
 
@@ -85,6 +89,7 @@ class AddInstallmentController {
     required String paymentFrequency,
     required String provider,
     int paidMonths = 0,
+    String? merchantId,
   }) async {
     final userBox = HiveService.getUserBox();
     if (userBox.isEmpty) {
@@ -110,6 +115,8 @@ class AddInstallmentController {
       paymentFrequency: paymentFrequency,
       provider: provider,
       lender: provider,
+      merchantId: merchantId,
+      customerName: merchantId != null ? user.name : null,
     );
 
     final installmentBox = HiveService.getInstallmentBox();
@@ -118,6 +125,33 @@ class AddInstallmentController {
     user.installments?.add(newInstallment);
     await user.save();
 
+    if (merchantId != null) {
+      await _linkToMerchantLedger(merchantId, newInstallment);
+    }
+
     return newInstallment;
+  }
+
+  /// Adds the newly created installment to the issuing merchant's
+  /// [BusinessAccount.sentQists] ledger, so it shows up on their Merchant
+  /// Dashboard. Both sides reference the same [Installment] Hive object.
+  Future<void> _linkToMerchantLedger(
+    String merchantId,
+    Installment installment,
+  ) async {
+    final businessBox = HiveService.getBusinessBox();
+    BusinessAccount? business;
+    for (final b in businessBox.values) {
+      if (b.id == merchantId) {
+        business = b;
+        break;
+      }
+    }
+    if (business == null) return;
+
+    final installmentBox = HiveService.getInstallmentBox();
+    business.sentQists ??= HiveList(installmentBox);
+    business.sentQists!.add(installment);
+    await business.save();
   }
 }

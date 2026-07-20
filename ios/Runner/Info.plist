@@ -49,5 +49,18 @@
 	<string>Used to take photos of your receipts and warranty documents.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Used to select photos of your receipts and warranty documents from your gallery.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.qistiraha.pay</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>qistiraha</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

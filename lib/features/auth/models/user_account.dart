@@ -17,10 +17,20 @@ class UserAccount extends HiveObject {
   @HiveField(3, defaultValue: 1)
   int salaryDay;
 
+  /// 'consumer' or 'merchant'. See [UserRole].
+  @HiveField(4, defaultValue: 'consumer')
+  String role;
+
+  /// Set when [role] is 'merchant' — points to the linked [BusinessAccount.id].
+  @HiveField(5)
+  String? businessId;
+
   UserAccount({
     required this.name,
     required this.monthlyIncome,
     this.installments,
     this.salaryDay = 1,
+    this.role = 'consumer',
+    this.businessId,
   });
 }

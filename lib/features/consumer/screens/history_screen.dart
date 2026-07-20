@@ -25,7 +25,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF8F9FA),
         elevation: 0,
-        title: const Text('History', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'History',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -33,12 +36,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
               value: _sortBy,
               underline: const SizedBox(),
               icon: const Icon(Icons.sort, color: Colors.black, size: 20),
-              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 14),
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
               items: const [
                 DropdownMenuItem(value: 'name', child: Text('Name')),
-                DropdownMenuItem(value: 'total debt', child: Text('Total Debt')),
-                DropdownMenuItem(value: 'installment debt', child: Text('Installment Debt')),
-                DropdownMenuItem(value: 'installment duration', child: Text('Duration')),
+                DropdownMenuItem(
+                  value: 'total debt',
+                  child: Text('Total Debt'),
+                ),
+                DropdownMenuItem(
+                  value: 'installment debt',
+                  child: Text('Installment Debt'),
+                ),
+                DropdownMenuItem(
+                  value: 'installment duration',
+                  child: Text('Duration'),
+                ),
                 DropdownMenuItem(value: 'urgency', child: Text('Urgency')),
               ],
               onChanged: (val) {
@@ -55,18 +71,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
       body: ValueListenableBuilder(
         valueListenable: HiveService.getUserBox().listenable(),
         builder: (context, Box<UserAccount> box, _) {
-          if (box.isEmpty) return const Center(child: CircularProgressIndicator());
+          if (box.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
           UserAccount user = box.values.first;
- 
+
           return ValueListenableBuilder(
             valueListenable: HiveService.getInstallmentBox().listenable(),
             builder: (context, Box<Installment> installmentBox, _) {
-              var paidInstallments = user.installments?.where((inst) {
-                if (inst.statusEnum != InstallmentStatus.paid) return false;
-                if (_filter == 'Everyday') return !inst.isLongTerm;
-                if (_filter == 'Assets') return inst.isLongTerm;
-                return true;
-              }).toList() ?? [];
+              var paidInstallments =
+                  user.installments?.where((inst) {
+                    if (inst.statusEnum != InstallmentStatus.paid) return false;
+                    if (_filter == 'Everyday') return !inst.isLongTerm;
+                    if (_filter == 'Assets') return inst.isLongTerm;
+                    return true;
+                  }).toList() ??
+                  [];
 
               Widget bodyContent;
               if (paidInstallments.isEmpty) {
@@ -79,7 +99,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         const SizedBox(height: 16),
                         Text(
                           'No payment history yet.',
-                          style: TextStyle(fontSize: 18, color: Colors.grey[500], fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[500],
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -91,7 +115,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   );
                 } else {
                   bodyContent = Center(
-                    child: Text('No paid ${(_filter == 'Assets') ? 'long-term assets' : 'everyday installments'} found.', style: const TextStyle(color: Colors.grey)),
+                    child: Text(
+                      'No paid ${(_filter == 'Assets') ? 'long-term assets' : 'everyday installments'} found.',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
                   );
                 }
               } else {
@@ -99,33 +126,47 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 paidInstallments.sort((a, b) {
                   switch (_sortBy) {
                     case 'name':
-                      return a.merchantName.toLowerCase().compareTo(b.merchantName.toLowerCase());
+                      return a.merchantName.toLowerCase().compareTo(
+                        b.merchantName.toLowerCase(),
+                      );
                     case 'total debt':
-                      return b.amount.compareTo(a.amount); // descending original debt
+                      return b.amount.compareTo(
+                        a.amount,
+                      ); // descending original debt
                     case 'installment debt':
-                      return b.monthlyPayment.compareTo(a.monthlyPayment); // descending
+                      return b.monthlyPayment.compareTo(
+                        a.monthlyPayment,
+                      ); // descending
                     case 'installment duration':
-                      return b.totalMonths.compareTo(a.totalMonths); // descending
+                      return b.totalMonths.compareTo(
+                        a.totalMonths,
+                      ); // descending
                     case 'urgency':
                     default:
-                      return b.dueDate.compareTo(a.dueDate); // descending (latest paid/due first)
+                      return b.dueDate.compareTo(
+                        a.dueDate,
+                      ); // descending (latest paid/due first)
                   }
                 });
 
-                final currencyFormatter = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
+                final currencyFormatter = NumberFormat.currency(
+                  symbol: 'EGP ',
+                  decimalDigits: 0,
+                );
 
                 bodyContent = ListView.builder(
                   padding: const EdgeInsets.all(20),
                   itemCount: paidInstallments.length,
                   itemBuilder: (context, index) {
                     var inst = paidInstallments[index];
-                    
+
                     return GestureDetector(
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => InstallmentDetailsScreen(installment: inst),
+                            builder: (context) =>
+                                InstallmentDetailsScreen(installment: inst),
                           ),
                         );
                       },
@@ -148,7 +189,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     color: Colors.green[50],
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.check_circle, color: Colors.green, size: 24),
+                                  child: const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green,
+                                    size: 24,
+                                  ),
                                 ),
                                 const SizedBox(width: 16),
                                 Column(
@@ -156,13 +201,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   children: [
                                     Text(
                                       inst.merchantName,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
                                     ),
                                     if (inst.itemDescription.isNotEmpty) ...[
                                       const SizedBox(height: 4),
                                       Text(
                                         inst.itemDescription,
-                                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 13,
+                                        ),
                                       ),
                                     ],
                                   ],
@@ -174,18 +225,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               children: [
                                 Text(
                                   currencyFormatter.format(inst.amount),
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
                                 ),
                                 const SizedBox(height: 4),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.green[50],
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: const Text(
                                     'FULLY PAID',
-                                    style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      color: Colors.green,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -205,7 +266,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                     child: Wrap(
                       spacing: 8,
-                      children: ['All', 'Everyday', 'Assets'].map((String filterName) {
+                      children: ['All', 'Everyday', 'Assets'].map((
+                        String filterName,
+                      ) {
                         return FilterChip(
                           label: Text(filterName),
                           selected: _filter == filterName,
@@ -217,8 +280,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           selectedColor: Colors.blue[100],
                           checkmarkColor: Colors.blue[800],
                           labelStyle: TextStyle(
-                            color: _filter == filterName ? Colors.blue[800] : Colors.black87,
-                            fontWeight: _filter == filterName ? FontWeight.bold : FontWeight.normal,
+                            color: _filter == filterName
+                                ? Colors.blue[800]
+                                : Colors.black87,
+                            fontWeight: _filter == filterName
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         );
                       }).toList(),

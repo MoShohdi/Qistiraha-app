@@ -9,7 +9,7 @@ enum FeeType {
   @HiveField(1)
   percentage,
   @HiveField(2)
-  mixed
+  mixed,
 }
 
 @HiveType(typeId: 4)

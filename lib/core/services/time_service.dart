@@ -7,6 +7,7 @@ class TimeService {
     }
     return DateTime.now();
   }
+
   static String formatDueDate(int totalDays) {
     if (totalDays == 0) {
       return "Due today";

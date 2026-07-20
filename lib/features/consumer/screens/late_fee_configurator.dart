@@ -6,7 +6,8 @@ class LateFeeConfiguratorScreen extends StatefulWidget {
   const LateFeeConfiguratorScreen({super.key});
 
   @override
-  State<LateFeeConfiguratorScreen> createState() => _LateFeeConfiguratorScreenState();
+  State<LateFeeConfiguratorScreen> createState() =>
+      _LateFeeConfiguratorScreenState();
 }
 
 class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
@@ -23,11 +24,11 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
       percentage: double.tryParse(_percentageController.text) ?? 0.0,
     );
     await box.add(rule);
-    
+
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Late Fee Rule Saved!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Late Fee Rule Saved!')));
       Navigator.pop(context);
     }
   }
@@ -84,7 +85,7 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
               style: TextStyle(fontSize: 16, color: Colors.black54),
             ),
             const SizedBox(height: 32),
-            
+
             _buildRuleOption(
               FeeType.fixed,
               'A Fixed Fee (EGP)',
@@ -96,7 +97,9 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
               FeeType.percentage,
               'A Percentage Fee (%)',
               'e.g., A fee of 5% on your installment.',
-              _selectedType == FeeType.percentage ? _buildPercentageInput() : null,
+              _selectedType == FeeType.percentage
+                  ? _buildPercentageInput()
+                  : null,
             ),
             const SizedBox(height: 16),
             _buildRuleOption(
@@ -105,7 +108,7 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
               'e.g., A 20 EGP fee + 2% of the installment.',
               _selectedType == FeeType.mixed ? _buildMixedInput() : null,
             ),
-            
+
             const SizedBox(height: 48),
             SizedBox(
               width: double.infinity,
@@ -122,7 +125,13 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: const [
-                    Text('Next Step', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Next Step',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     SizedBox(width: 8),
                     Icon(Icons.arrow_forward, size: 20),
                   ],
@@ -146,7 +155,12 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
     );
   }
 
-  Widget _buildRuleOption(FeeType type, String title, String description, Widget? extraContent) {
+  Widget _buildRuleOption(
+    FeeType type,
+    String title,
+    String description,
+    Widget? extraContent,
+  ) {
     bool isSelected = _selectedType == type;
     return GestureDetector(
       onTap: () {
@@ -171,8 +185,12 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                  color: isSelected ? const Color(0xFF2E65F3) : Colors.grey[400],
+                  isSelected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color: isSelected
+                      ? const Color(0xFF2E65F3)
+                      : Colors.grey[400],
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -181,7 +199,10 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -199,7 +220,7 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
                 padding: const EdgeInsets.only(left: 40.0), // Align with text
                 child: extraContent,
               ),
-            ]
+            ],
           ],
         ),
       ),
@@ -246,7 +267,10 @@ class _LateFeeConfiguratorScreenState extends State<LateFeeConfiguratorScreen> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
             ),
           ),

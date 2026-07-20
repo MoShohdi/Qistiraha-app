@@ -48,7 +48,10 @@ class PenaltyEngine {
     int daysLate = justDate.difference(dueDateJustDate).inDays;
     if (daysLate <= 0) return 0;
 
-    int calculatedArrears = calculateCalendarMonthsPassed(dueDateJustDate, justDate);
+    int calculatedArrears = calculateCalendarMonthsPassed(
+      dueDateJustDate,
+      justDate,
+    );
     if (daysLate > 0 && calculatedArrears == 0) {
       calculatedArrears = 1;
     }
@@ -90,7 +93,10 @@ class PenaltyEngine {
     int daysLate = justDate.difference(dueDateJustDate).inDays;
     if (daysLate <= 0) return 0;
 
-    int calculatedArrears = calculateCalendarMonthsPassed(dueDateJustDate, justDate);
+    int calculatedArrears = calculateCalendarMonthsPassed(
+      dueDateJustDate,
+      justDate,
+    );
     return (calculatedArrears ~/ inst.monthsPerPayment) + 1;
   }
 

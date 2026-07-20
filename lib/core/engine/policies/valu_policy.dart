@@ -20,7 +20,8 @@ class ValuPolicy implements LateFeePolicy {
   ) {
     // Acceleration clause
     if (uncappedMissedMonths >= 2) {
-      double entireRemainingPrincipal = remainingInstallments * inst.monthlyPayment;
+      double entireRemainingPrincipal =
+          remainingInstallments * inst.monthlyPayment;
       return PenaltyResult(
         lateFee: entireRemainingPrincipal * 0.10,
         isAccelerated: true,

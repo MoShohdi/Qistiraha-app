@@ -20,19 +20,22 @@ class BusinessAccountAdapter extends TypeAdapter<BusinessAccount> {
       businessName: fields[0] as String,
       category: fields[1] as String,
       sentQists: (fields[2] as HiveList?)?.castHiveList(),
+      id: fields[3] == null ? '' : fields[3] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, BusinessAccount obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.businessName)
       ..writeByte(1)
       ..write(obj.category)
       ..writeByte(2)
-      ..write(obj.sentQists);
+      ..write(obj.sentQists)
+      ..writeByte(3)
+      ..write(obj.id);
   }
 
   @override

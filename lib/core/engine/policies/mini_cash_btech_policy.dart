@@ -20,7 +20,8 @@ class MiniCashBtechPolicy implements LateFeePolicy {
   ) {
     // Acceleration clause
     if (uncappedMissedMonths >= 2) {
-      double entireRemainingPrincipal = remainingInstallments * inst.monthlyPayment;
+      double entireRemainingPrincipal =
+          remainingInstallments * inst.monthlyPayment;
       double fee = entireRemainingPrincipal * 0.06;
       return PenaltyResult(
         lateFee: fee < 60.0 ? 60.0 : fee,

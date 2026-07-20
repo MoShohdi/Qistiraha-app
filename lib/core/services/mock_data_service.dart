@@ -1,16 +1,20 @@
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 import 'package:qistiraha/features/auth/models/user_account.dart';
+import 'package:qistiraha/features/auth/models/business_account.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
+import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'hive_service.dart';
 import 'time_service.dart';
 
 class MockDataService {
   static Future<void> populateMockData() async {
     final userBox = HiveService.getUserBox();
+    final businessBox = HiveService.getBusinessBox();
     final installmentBox = HiveService.getInstallmentBox();
     // Clear data to enforce the new mock data structure
     await userBox.clear();
+    await businessBox.clear();
     await installmentBox.clear();
 
     var uuid = const Uuid();
@@ -35,7 +39,7 @@ class MockDataService {
       amount: 400.0,
       merchantName: 'Home Essentials',
       itemDescription: 'Philips Air Fryer XXL',
-      dueDate: TimeService.now().add(const Duration(days: 5)), 
+      dueDate: TimeService.now().add(const Duration(days: 5)),
       totalMonths: 4,
       paidMonths: 2,
       status: 'Active',
@@ -104,8 +108,6 @@ class MockDataService {
       provider: 'Housing & Development Bank (HDB)',
     );
 
-
-
     await installmentBox.addAll([inst1, inst2, inst3, inst4, inst5, inst6]);
 
     // Create user
@@ -118,7 +120,83 @@ class MockDataService {
     await userBox.add(user);
 
     // Link installments to user
-    user.installments = HiveList(installmentBox, objects: [inst1, inst2, inst3, inst4, inst5, inst6]);
+    user.installments = HiveList(
+      installmentBox,
+      objects: [inst1, inst2, inst3, inst4, inst5, inst6],
+    );
     await user.save();
+
+    // Create Merchant Mock Data
+    var bInst1 = Installment(
+      id: uuid.v4(),
+      amount: 12000,
+      merchantName: 'B.TECH',
+      itemDescription: 'Samsung Refrigerator',
+      dueDate: TimeService.now().add(const Duration(days: 10)),
+      totalMonths: 12,
+      paidMonths: 4,
+      status: InstallmentStatus.active.raw,
+      monthlyPayment: 1000,
+      downPayment: 0,
+      interestRate: 0,
+      category: 'Electronics',
+      isLongTerm: true,
+      paymentFrequency: 'Monthly',
+      lender: 'Valu',
+      provider: 'Valu',
+    );
+    
+    var bInst2 = Installment(
+      id: uuid.v4(),
+      amount: 4500,
+      merchantName: 'B.TECH',
+      itemDescription: 'Microwave Oven',
+      dueDate: TimeService.now().subtract(const Duration(days: 2)),
+      totalMonths: 6,
+      paidMonths: 2,
+      status: InstallmentStatus.overdue.raw,
+      monthlyPayment: 750,
+      downPayment: 0,
+      interestRate: 0,
+      category: 'Electronics',
+      isLongTerm: false,
+      paymentFrequency: 'Monthly',
+      lender: 'Sympl',
+      provider: 'Sympl',
+    );
+
+    var bInst3 = Installment(
+      id: uuid.v4(),
+      amount: 8000,
+      merchantName: 'B.TECH',
+      itemDescription: 'Smart TV 55"',
+      dueDate: TimeService.now().add(const Duration(days: 20)),
+      totalMonths: 24,
+      paidMonths: 24,
+      status: InstallmentStatus.paid.raw,
+      monthlyPayment: 333.33,
+      downPayment: 0,
+      interestRate: 0,
+      category: 'Electronics',
+      isLongTerm: true,
+      paymentFrequency: 'Monthly',
+      lender: 'AMAN Holding',
+      provider: 'AMAN Holding',
+    );
+
+    await installmentBox.addAll([bInst1, bInst2, bInst3]);
+
+    var business = BusinessAccount(
+      id: uuid.v4(),
+      businessName: 'B.TECH',
+      category: 'Electronics & Home Appliances',
+    );
+    await businessBox.add(business);
+
+    business.sentQists = HiveList(
+      installmentBox,
+      objects: [bInst1, bInst2, bInst3],
+    );
+    await business.save();
   }
 }

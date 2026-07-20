@@ -5,7 +5,6 @@
 /// [Installment] so all call sites can use type-safe comparisons.
 library;
 
-
 enum InstallmentStatus {
   active,
   paid,

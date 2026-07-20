@@ -48,7 +48,7 @@ class LenderSelectionScreen extends StatelessWidget {
       'Mashreq Bank Egypt',
       'saib Bank',
       'Housing and Development Bank (HDB)',
-      'Other'
+      'Other',
     ];
 
     return Scaffold(
@@ -57,7 +57,10 @@ class LenderSelectionScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
-        title: const Text('Select Lender', style: TextStyle(color: Colors.black)),
+        title: const Text(
+          'Select Lender',
+          style: TextStyle(color: Colors.black),
+        ),
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -72,11 +75,23 @@ class LenderSelectionScreen extends StatelessWidget {
               side: BorderSide(color: Colors.grey[300]!),
             ),
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              title: Text(lender, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 12,
+              ),
+              title: Text(
+                lender,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 8.0),
-                child: Text('Please contact your lender for late fees details.', style: TextStyle(color: Colors.grey[700])),
+                child: Text(
+                  'Please contact your lender for late fees details.',
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
               ),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () => _selectLender(context, lender),

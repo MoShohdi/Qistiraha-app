@@ -30,20 +30,24 @@ class InstallmentAdapter extends TypeAdapter<Installment> {
       interestRate: fields[10] as double,
       category: fields[11] as String,
       lender: fields[12] == null ? 'Other' : fields[12] as String,
-      pastPayments:
-          fields[13] == null ? [] : (fields[13] as List).cast<double>(),
+      pastPayments: fields[13] == null
+          ? []
+          : (fields[13] as List).cast<double>(),
       warrantyImagePath: fields[14] as String?,
       lastPaidAt: fields[15] as DateTime?,
       isLongTerm: fields[16] == null ? false : fields[16] as bool,
       paymentFrequency: fields[17] == null ? 'Monthly' : fields[17] as String,
       provider: fields[18] == null ? 'Other / Custom' : fields[18] as String,
+      merchantId: fields[19] as String?,
+      customerName: fields[20] as String?,
+      customerPhone: fields[21] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Installment obj) {
     writer
-      ..writeByte(19)
+      ..writeByte(22)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -81,7 +85,13 @@ class InstallmentAdapter extends TypeAdapter<Installment> {
       ..writeByte(17)
       ..write(obj.paymentFrequency)
       ..writeByte(18)
-      ..write(obj.provider);
+      ..write(obj.provider)
+      ..writeByte(19)
+      ..write(obj.merchantId)
+      ..writeByte(20)
+      ..write(obj.customerName)
+      ..writeByte(21)
+      ..write(obj.customerPhone);
   }
 
   @override

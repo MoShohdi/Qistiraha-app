@@ -28,7 +28,10 @@ class HiveService {
   }
 
   static Box<UserAccount> getUserBox() => Hive.box<UserAccount>(userBoxName);
-  static Box<BusinessAccount> getBusinessBox() => Hive.box<BusinessAccount>(businessBoxName);
-  static Box<Installment> getInstallmentBox() => Hive.box<Installment>(installmentBoxName);
-  static Box<LateFeeRule> getLateFeeBox() => Hive.box<LateFeeRule>(lateFeeBoxName);
+  static Box<BusinessAccount> getBusinessBox() =>
+      Hive.box<BusinessAccount>(businessBoxName);
+  static Box<Installment> getInstallmentBox() =>
+      Hive.box<Installment>(installmentBoxName);
+  static Box<LateFeeRule> getLateFeeBox() =>
+      Hive.box<LateFeeRule>(lateFeeBoxName);
 }

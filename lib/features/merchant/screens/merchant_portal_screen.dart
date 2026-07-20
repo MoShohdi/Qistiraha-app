@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+import 'package:qistiraha/features/auth/models/business_account.dart';
+import '../models/qist_link_payload.dart';
 import 'qist_link_screen.dart';
 
+/// "Generate Payment Link" screen — the merchant enters the sale details
+/// here and gets a scannable QR / WhatsApp link back on [QistLinkScreen].
 class MerchantPortalScreen extends StatefulWidget {
-  const MerchantPortalScreen({super.key});
+  final BusinessAccount business;
+  const MerchantPortalScreen({super.key, required this.business});
 
   @override
   State<MerchantPortalScreen> createState() => _MerchantPortalScreenState();
@@ -13,21 +19,30 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
   final _assetNameController = TextEditingController();
   final _priceController = TextEditingController();
   final _termsController = TextEditingController();
+  final _buyerNameController = TextEditingController();
   final _buyerPhoneController = TextEditingController();
 
   void _generateQR() {
     if (_formKey.currentState!.validate()) {
-      Map<String, dynamic> payload = {
-        'assetName': _assetNameController.text,
-        'price': double.tryParse(_priceController.text) ?? 0.0,
-        'terms': int.tryParse(_termsController.text) ?? 1,
-        'buyerPhone': _buyerPhoneController.text,
-      };
+      final payload = QistLinkPayload(
+        planId: const Uuid().v4(),
+        merchantId: widget.business.id,
+        merchantName: widget.business.businessName,
+        item: _assetNameController.text,
+        price: double.tryParse(_priceController.text) ?? 0.0,
+        months: int.tryParse(_termsController.text) ?? 1,
+        buyerName: _buyerNameController.text.isNotEmpty
+            ? _buyerNameController.text
+            : null,
+        buyerPhone: _buyerPhoneController.text.isNotEmpty
+            ? _buyerPhoneController.text
+            : null,
+      );
 
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => QistLinkScreen(transactionData: payload),
+          builder: (context) => QistLinkScreen(payload: payload),
         ),
       );
     }
@@ -38,6 +53,7 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
     _assetNameController.dispose();
     _priceController.dispose();
     _termsController.dispose();
+    _buyerNameController.dispose();
     _buyerPhoneController.dispose();
     super.dispose();
   }
@@ -54,7 +70,7 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'Merchant Portal',
+          'Generate Payment Link',
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
@@ -75,20 +91,59 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
                 style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
               const SizedBox(height: 32),
-              _buildTextField('Asset Name', _assetNameController, Icons.shopping_bag),
+              _buildTextField(
+                'Item Description',
+                _assetNameController,
+                Icons.shopping_bag,
+              ),
               const SizedBox(height: 16),
-              _buildTextField('Price (EGP)', _priceController, Icons.attach_money, keyboardType: TextInputType.number),
+              _buildTextField(
+                'Total Price (EGP)',
+                _priceController,
+                Icons.attach_money,
+                keyboardType: TextInputType.number,
+              ),
               const SizedBox(height: 16),
-              _buildTextField('Terms (Months)', _termsController, Icons.calendar_month, keyboardType: TextInputType.number),
+              _buildTextField(
+                'Installment Terms (Months)',
+                _termsController,
+                Icons.calendar_month,
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Buyer (optional)',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildTextField(
+                'Buyer Name',
+                _buyerNameController,
+                Icons.person_outline,
+                required: false,
+              ),
               const SizedBox(height: 16),
-              _buildTextField('Buyer Phone', _buyerPhoneController, Icons.phone, keyboardType: TextInputType.phone),
+              _buildTextField(
+                'Buyer Phone',
+                _buyerPhoneController,
+                Icons.phone,
+                keyboardType: TextInputType.phone,
+                required: false,
+              ),
               const SizedBox(height: 48),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: _generateQR,
                   icon: const Icon(Icons.qr_code),
-                  label: const Text('Generate Qist-Link QR', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  label: const Text(
+                    'Generate Qist-Link QR',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E2337),
                     foregroundColor: Colors.white,
@@ -106,11 +161,20 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {TextInputType? keyboardType}) {
+  Widget _buildTextField(
+    String label,
+    TextEditingController controller,
+    IconData icon, {
+    TextInputType? keyboardType,
+    bool required = true,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
@@ -128,7 +192,9 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
               borderSide: BorderSide(color: Colors.grey[300]!),
             ),
           ),
-          validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+          validator: required
+              ? (value) => value == null || value.isEmpty ? 'Required' : null
+              : null,
         ),
       ],
     );

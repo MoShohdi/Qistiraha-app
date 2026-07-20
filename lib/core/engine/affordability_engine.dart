@@ -1,4 +1,3 @@
-
 import 'package:qistiraha/features/auth/models/user_account.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
@@ -96,21 +95,25 @@ class AffordabilityEngine {
     for (var inst in user.installments!) {
       if (inst.statusEnum != InstallmentStatus.paid) {
         PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
-        DateTime dueDateJustDate =
-            DateTime(inst.dueDate.year, inst.dueDate.month, inst.dueDate.day);
+        DateTime dueDateJustDate = DateTime(
+          inst.dueDate.year,
+          inst.dueDate.month,
+          inst.dueDate.day,
+        );
         int daysLate = justDate.difference(dueDateJustDate).inDays;
 
         if (daysLate > 0 || pr.isAccelerated) {
           double displayAmountDue;
           if (pr.isAccelerated) {
             displayAmountDue =
-                ((inst.totalMonths - inst.paidMonths) * _getMonthlyDrain(inst)) +
-                    pr.lateFee;
+                ((inst.totalMonths - inst.paidMonths) *
+                    _getMonthlyDrain(inst)) +
+                pr.lateFee;
           } else {
             displayAmountDue =
                 (_getMonthlyDrain(inst) *
                     PenaltyEngine.calculateMissedMonths(inst)) +
-                    pr.lateFee;
+                pr.lateFee;
           }
           total += displayAmountDue;
         } else if (inst.dueDate.year == now.year &&
@@ -159,15 +162,21 @@ class AffordabilityEngine {
       // We are in the second half — cycle started this month
       cycleStart = DateTime(today.year, today.month, salaryDay);
       // End = one day before salaryDay of next month
-      DateTime nextMonthStart = DateTime(today.year, today.month + 1, salaryDay);
+      DateTime nextMonthStart = DateTime(
+        today.year,
+        today.month + 1,
+        salaryDay,
+      );
       cycleEnd = nextMonthStart.subtract(const Duration(days: 1));
     } else {
       // We are in the first half — cycle started last month
       cycleStart = DateTime(today.year, today.month - 1, salaryDay);
       // End = one day before salaryDay of this month
-      cycleEnd =
-          DateTime(today.year, today.month, salaryDay)
-              .subtract(const Duration(days: 1));
+      cycleEnd = DateTime(
+        today.year,
+        today.month,
+        salaryDay,
+      ).subtract(const Duration(days: 1));
     }
 
     return DateRange(start: cycleStart, end: cycleEnd);
@@ -207,7 +216,9 @@ class AffordabilityEngine {
   /// Sums all installment obligations whose due date falls within [cycle].
   /// Overdue installments (past due date) are always included.
   static double getObligationsInCycle(
-      List<Installment> installments, DateRange cycle) {
+    List<Installment> installments,
+    DateRange cycle,
+  ) {
     double total = 0.0;
     DateTime now = TimeService.now();
     DateTime today = DateTime(now.year, now.month, now.day);
@@ -215,8 +226,11 @@ class AffordabilityEngine {
     for (var inst in installments) {
       if (inst.statusEnum == InstallmentStatus.paid) continue;
 
-      DateTime dueJust =
-          DateTime(inst.dueDate.year, inst.dueDate.month, inst.dueDate.day);
+      DateTime dueJust = DateTime(
+        inst.dueDate.year,
+        inst.dueDate.month,
+        inst.dueDate.day,
+      );
       bool isDueInCycle =
           !dueJust.isBefore(cycle.start) && !dueJust.isAfter(cycle.end);
       bool isOverdue = dueJust.isBefore(today);
@@ -234,7 +248,9 @@ class AffordabilityEngine {
   ///
   /// Used by [calculateSafeToSpend].
   static double getOwedInCycle(
-      List<Installment> installments, DateRange cycle) {
+    List<Installment> installments,
+    DateRange cycle,
+  ) {
     double total = 0.0;
     DateTime now = TimeService.now();
     DateTime today = DateTime(now.year, now.month, now.day);
@@ -242,8 +258,11 @@ class AffordabilityEngine {
     for (var inst in installments) {
       if (inst.statusEnum == InstallmentStatus.paid) continue;
 
-      DateTime dueJust =
-          DateTime(inst.dueDate.year, inst.dueDate.month, inst.dueDate.day);
+      DateTime dueJust = DateTime(
+        inst.dueDate.year,
+        inst.dueDate.month,
+        inst.dueDate.day,
+      );
       bool isDueInCycle =
           !dueJust.isBefore(cycle.start) && !dueJust.isAfter(cycle.end);
       bool isOverdue = dueJust.isBefore(today);
@@ -264,7 +283,9 @@ class AffordabilityEngine {
   /// the exact moment the user tapped pay — so it always stays within the
   /// cycle window where the payment actually occurred.
   static double getPaidInCycle(
-      List<Installment> installments, DateRange cycle) {
+    List<Installment> installments,
+    DateRange cycle,
+  ) {
     double total = 0.0;
 
     for (var inst in installments) {
@@ -294,7 +315,10 @@ class AffordabilityEngine {
   /// The result resets automatically when `getCurrentBillingCycle` rolls over
   /// on the user's `incomeDepositDay`.
   static double calculateSafeToSpend(
-      List<Installment> installments, double monthlyIncome, int salaryDay) {
+    List<Installment> installments,
+    double monthlyIncome,
+    int salaryDay,
+  ) {
     DateTime now = TimeService.now();
     DateRange cycle = getCurrentBillingCycle(salaryDay, now);
     double owed = getOwedInCycle(installments, cycle);
@@ -305,7 +329,10 @@ class AffordabilityEngine {
   /// Returns how much "safe headroom" the user has left this billing cycle
   /// against the 50%-of-income threshold (legacy — used by status badge).
   static double getRemainingSafeBuffer(
-      List<Installment> installments, double monthlyIncome, int salaryDay) {
+    List<Installment> installments,
+    double monthlyIncome,
+    int salaryDay,
+  ) {
     DateTime now = TimeService.now();
     DateRange cycle = getCurrentBillingCycle(salaryDay, now);
     double obligations = getObligationsInCycle(installments, cycle);
@@ -336,7 +363,9 @@ class AffordabilityEngine {
     required int salaryDay,
   }) {
     DateTime now = TimeService.now();
-    double hypotheticalMonthly = months > 0 ? (itemCost - downPayment) / months : 0.0;
+    double hypotheticalMonthly = months > 0
+        ? (itemCost - downPayment) / months
+        : 0.0;
 
     // --- True Discretionary Income (FOIR) ---
     // Sum all active monthly payments (base installment amounts only, no penalties).
@@ -352,7 +381,9 @@ class AffordabilityEngine {
     double newMonthlyObligation = currentObligations + hypotheticalMonthly;
 
     // Calculate FOIR
-    double foir = monthlyIncome > 0 ? newMonthlyObligation / monthlyIncome : 0.0;
+    double foir = monthlyIncome > 0
+        ? newMonthlyObligation / monthlyIncome
+        : 0.0;
 
     RiskTier tier;
     if (foir <= 0.35) {
@@ -366,8 +397,9 @@ class AffordabilityEngine {
     // Debt-free date: max(existing furthest, today + months)
     DateTime existingDebtFree = getAbsoluteDebtFreeDate(existing);
     DateTime hypotheticalEnd = DateTime(now.year, now.month + months, now.day);
-    DateTime newDebtFreeDate =
-        hypotheticalEnd.isAfter(existingDebtFree) ? hypotheticalEnd : existingDebtFree;
+    DateTime newDebtFreeDate = hypotheticalEnd.isAfter(existingDebtFree)
+        ? hypotheticalEnd
+        : existingDebtFree;
 
     return SimulatedOutlook(
       newMonthlyObligation: newMonthlyObligation,

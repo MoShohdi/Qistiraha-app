@@ -21,13 +21,15 @@ class UserAccountAdapter extends TypeAdapter<UserAccount> {
       monthlyIncome: fields[1] as double,
       installments: (fields[2] as HiveList?)?.castHiveList(),
       salaryDay: fields[3] == null ? 1 : fields[3] as int,
+      role: fields[4] == null ? 'consumer' : fields[4] as String,
+      businessId: fields[5] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserAccount obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -35,7 +37,11 @@ class UserAccountAdapter extends TypeAdapter<UserAccount> {
       ..writeByte(2)
       ..write(obj.installments)
       ..writeByte(3)
-      ..write(obj.salaryDay);
+      ..write(obj.salaryDay)
+      ..writeByte(4)
+      ..write(obj.role)
+      ..writeByte(5)
+      ..write(obj.businessId);
   }
 
   @override
