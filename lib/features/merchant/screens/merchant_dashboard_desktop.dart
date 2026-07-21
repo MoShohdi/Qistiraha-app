@@ -7,6 +7,7 @@ import 'package:qistiraha/core/utils/responsive_layout.dart';
 import 'package:qistiraha/features/auth/models/business_account.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
+import 'package:qistiraha/features/auth/screens/login_screen_desktop.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
@@ -49,7 +50,12 @@ class _MerchantDashboardDesktopState extends State<MerchantDashboardDesktop> {
     if (context.mounted) {
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+        MaterialPageRoute(
+          builder: (_) => const ResponsiveLayout(
+            mobileWidget: WelcomeScreen(),
+            desktopWidget: LoginScreenDesktop(),
+          ),
+        ),
         (route) => false,
       );
     }

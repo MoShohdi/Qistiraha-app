@@ -9,6 +9,7 @@ import 'package:qistiraha/core/utils/responsive_layout.dart';
 import 'package:qistiraha/features/auth/models/user_account.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
+import 'package:qistiraha/features/auth/screens/login_screen_desktop.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
@@ -144,7 +145,12 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
     if (context.mounted) {
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+        MaterialPageRoute(
+          builder: (_) => const ResponsiveLayout(
+            mobileWidget: WelcomeScreen(),
+            desktopWidget: LoginScreenDesktop(),
+          ),
+        ),
         (route) => false,
       );
     }
@@ -609,51 +615,53 @@ class _OverviewTabState extends State<_OverviewTab> {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _ConsumerStatCard(
-                      label: 'Total Outstanding',
-                      value: widget.currency.format(totalOutstanding),
-                      icon: Icons.account_balance_wallet_outlined,
-                      color: _kBrandDark,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _ConsumerStatCard(
-                      label: 'Next Payment Due',
-                      value: nextDue == null
-                          ? 'Nothing due'
-                          : '${widget.currency.format(nextDue.monthlyPayment)} • ${DateFormat('dd MMM').format(nextDue.dueDate)}',
-                      icon: Icons.event_outlined,
-                      color: Colors.orange,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _ConsumerStatCard(
-                      label: 'Monthly Commitment',
-                      value: widget.currency.format(monthlyPaymentThisMonth),
-                      icon: Icons.calendar_month_outlined,
-                      color: _kBrand,
-                      statusDotColor: _affordabilityDotColor(
-                        affordabilityStatus,
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _ConsumerStatCard(
+                        label: 'Total Outstanding',
+                        value: widget.currency.format(totalOutstanding),
+                        icon: Icons.account_balance_wallet_outlined,
+                        color: _kBrandDark,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _CheckoutCalculatorCard(
-                      costController: _costController,
-                      downController: _downController,
-                      monthsController: _monthsController,
-                      outlook: _outlook,
-                      currency: widget.currency,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _ConsumerStatCard(
+                        label: 'Next Payment Due',
+                        value: nextDue == null
+                            ? 'Nothing due'
+                            : '${widget.currency.format(nextDue.monthlyPayment)} • ${DateFormat('dd MMM').format(nextDue.dueDate)}',
+                        icon: Icons.event_outlined,
+                        color: Colors.orange,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _ConsumerStatCard(
+                        label: 'Monthly Commitment',
+                        value: widget.currency.format(monthlyPaymentThisMonth),
+                        icon: Icons.calendar_month_outlined,
+                        color: _kBrand,
+                        statusDotColor: _affordabilityDotColor(
+                          affordabilityStatus,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _CheckoutCalculatorCard(
+                        costController: _costController,
+                        downController: _downController,
+                        monthsController: _monthsController,
+                        outlook: _outlook,
+                        currency: widget.currency,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 36),
               _buildSection(
