@@ -609,12 +609,10 @@ class _OverviewTabState extends State<_OverviewTab> {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 260,
+                  Expanded(
                     child: _ConsumerStatCard(
                       label: 'Total Outstanding',
                       value: widget.currency.format(totalOutstanding),
@@ -622,8 +620,8 @@ class _OverviewTabState extends State<_OverviewTab> {
                       color: _kBrandDark,
                     ),
                   ),
-                  SizedBox(
-                    width: 260,
+                  const SizedBox(width: 16),
+                  Expanded(
                     child: _ConsumerStatCard(
                       label: 'Next Payment Due',
                       value: nextDue == null
@@ -633,8 +631,8 @@ class _OverviewTabState extends State<_OverviewTab> {
                       color: Colors.orange,
                     ),
                   ),
-                  SizedBox(
-                    width: 260,
+                  const SizedBox(width: 16),
+                  Expanded(
                     child: _ConsumerStatCard(
                       label: 'Monthly Commitment',
                       value: widget.currency.format(monthlyPaymentThisMonth),
@@ -645,12 +643,15 @@ class _OverviewTabState extends State<_OverviewTab> {
                       ),
                     ),
                   ),
-                  _CheckoutCalculatorCard(
-                    costController: _costController,
-                    downController: _downController,
-                    monthsController: _monthsController,
-                    outlook: _outlook,
-                    currency: widget.currency,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _CheckoutCalculatorCard(
+                      costController: _costController,
+                      downController: _downController,
+                      monthsController: _monthsController,
+                      outlook: _outlook,
+                      currency: widget.currency,
+                    ),
                   ),
                 ],
               ),
@@ -809,7 +810,7 @@ class _CheckoutCalculatorCard extends StatelessWidget {
     }
 
     return Container(
-      width: 340,
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1356,10 +1357,10 @@ class _TotalPaidOffHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF2ECC71), Color(0xFF1B8A4C)],
+          colors: [Color(0xFF34D399), Color(0xFF15803D)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1368,7 +1369,7 @@ class _TotalPaidOffHeroCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(14),
@@ -1376,10 +1377,10 @@ class _TotalPaidOffHeroCard extends StatelessWidget {
             child: const Icon(
               Icons.emoji_events_outlined,
               color: Colors.white,
-              size: 32,
+              size: 26,
             ),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 18),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1392,16 +1393,16 @@ class _TotalPaidOffHeroCard extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   currency.format(amount),
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 34,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   '$completedCount installment${completedCount == 1 ? '' : 's'} fully paid off',
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
@@ -1452,24 +1453,20 @@ _BucketResult _computeBuckets(List<Installment> installments, String filter) {
   final labels = <String>[];
 
   for (int i = 0; i < numBuckets; i++) {
-    if (i == 0 && filter == 'All') {
-      labels.add('Now');
+    final mDate = DateTime(now.year, now.month + (i * stepSize), 1);
+    if (filter == 'Annually') {
+      labels.add(DateFormat('yyyy').format(mDate));
+    } else if (filter == 'Quarterly' || filter == 'Semi-Annually') {
+      final endDate = DateTime(
+        now.year,
+        now.month + (i * stepSize) + stepSize - 1,
+        1,
+      );
+      final startStr = DateFormat('MMM').format(mDate);
+      final endStr = DateFormat('MMM').format(endDate);
+      labels.add('$startStr-$endStr');
     } else {
-      final mDate = DateTime(now.year, now.month + (i * stepSize), 1);
-      if (filter == 'Annually') {
-        labels.add(DateFormat('yyyy').format(mDate));
-      } else if (filter == 'Quarterly' || filter == 'Semi-Annually') {
-        final endDate = DateTime(
-          now.year,
-          now.month + (i * stepSize) + stepSize - 1,
-          1,
-        );
-        final startStr = DateFormat('MMM').format(mDate);
-        final endStr = DateFormat('MMM').format(endDate);
-        labels.add('$startStr-$endStr');
-      } else {
-        labels.add(DateFormat('MMM').format(mDate));
-      }
+      labels.add(DateFormat('MMM').format(mDate));
     }
   }
 
@@ -1629,9 +1626,10 @@ class _InsightsTabState extends State<_InsightsTab> {
                 activeCount: active.length,
                 paidCount: paidCount,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: ['All', 'Quarterly', 'Semi-Annually', 'Annually'].map((
                   filter,
                 ) {
