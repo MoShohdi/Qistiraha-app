@@ -15,6 +15,7 @@ import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
 import 'package:qistiraha/widgets/income_edit_bottom_sheet.dart';
 import 'add_installment_screen.dart';
+import 'add_installment_desktop.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 const _kBrandDark = Color(0xFF5A75AD);
@@ -195,7 +196,10 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const AddInstallmentScreen(),
+                          builder: (_) => const ResponsiveLayout(
+                            mobileWidget: AddInstallmentScreen(),
+                            desktopWidget: AddInstallmentDesktopScreen(),
+                          ),
                         ),
                       );
                     },
