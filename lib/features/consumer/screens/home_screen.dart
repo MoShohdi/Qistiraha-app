@@ -91,29 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.fast_forward, color: Colors.black),
-                tooltip: 'Skip 1 Day',
-                onPressed: () {
-                  setState(() {
-                    TimeService.skipDays += 1;
-                  });
-                },
-              ),
-              if (TimeService.skipDays > 0)
-                IconButton(
-                  icon: const Icon(Icons.restore, color: Colors.deepPurple),
-                  tooltip: 'Reset Time',
-                  onPressed: () {
-                    setState(() {
-                      TimeService.skipDays = 0;
-                    });
-                  },
-                ),
-            ],
-          ),
           IconButton(
             icon: const Icon(Icons.notifications_none, color: Colors.black),
             onPressed: () {},
