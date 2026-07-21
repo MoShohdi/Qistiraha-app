@@ -1,12 +1,9 @@
+/// Thin abstraction over the system clock. Kept as a single seam so the rest
+/// of the app never calls `DateTime.now()` directly (which keeps time-based
+/// logic testable and previously hosted a debug time-skip harness, now
+/// removed for production).
 class TimeService {
-  static int skipDays = 0;
-
-  static DateTime now() {
-    if (skipDays > 0) {
-      return DateTime.now().add(Duration(days: skipDays));
-    }
-    return DateTime.now();
-  }
+  static DateTime now() => DateTime.now();
 
   static String formatDueDate(int totalDays) {
     if (totalDays == 0) {
