@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:qistiraha/core/utils/responsive_layout.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/consumer/screens/consumer_dashboard_desktop.dart';
 import 'package:qistiraha/features/merchant/screens/merchant_dashboard_desktop.dart';
@@ -58,10 +59,9 @@ class _LoginScreenDesktopState extends State<LoginScreenDesktop> {
         (route) => false,
       );
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Login failed. Please check your credentials.'),
-        ),
+      showDesktopSnackBar(
+        context,
+        message: 'Login failed. Please check your credentials.',
       );
     }
   }

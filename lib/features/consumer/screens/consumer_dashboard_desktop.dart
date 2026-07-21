@@ -332,7 +332,10 @@ class _Sidebar extends StatelessWidget {
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text(
                       'Add Installment',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1E2337),
@@ -800,7 +803,8 @@ class _CheckoutCalculatorCard extends StatelessWidget {
         case RiskTier.safe:
           resultColor = Colors.green[700]!;
           resultIcon = Icons.check_circle_outline;
-          resultText = 'Affordable • ${currency.format(o.newSafeBuffer)} left/mo';
+          resultText =
+              'Affordable • ${currency.format(o.newSafeBuffer)} left/mo';
           break;
         case RiskTier.stretch:
           resultColor = Colors.orange[800]!;
@@ -1308,11 +1312,7 @@ class _HistoryTabState extends State<_HistoryTab> {
                   child: Center(
                     child: Column(
                       children: [
-                        Icon(
-                          Icons.history,
-                          size: 56,
-                          color: Colors.grey[300],
-                        ),
+                        Icon(Icons.history, size: 56, color: Colors.grey[300]),
                         const SizedBox(height: 16),
                         Text(
                           'No payment history yet.',
@@ -1638,34 +1638,34 @@ class _InsightsTabState extends State<_InsightsTab> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: ['All', 'Quarterly', 'Semi-Annually', 'Annually'].map((
-                  filter,
-                ) {
-                  final isSelected = _chartFilter == filter;
-                  return FilterChip(
-                    label: Text(
-                      filter,
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.black87,
-                        fontSize: 13,
-                        fontWeight: isSelected
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                children: ['All', 'Quarterly', 'Semi-Annually', 'Annually'].map(
+                  (filter) {
+                    final isSelected = _chartFilter == filter;
+                    return FilterChip(
+                      label: Text(
+                        filter,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black87,
+                          fontSize: 13,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
                       ),
-                    ),
-                    selected: isSelected,
-                    onSelected: (_) => setState(() => _chartFilter = filter),
-                    backgroundColor: Colors.white,
-                    selectedColor: _kBrand,
-                    checkmarkColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                        color: isSelected ? _kBrand : Colors.grey[300]!,
+                      selected: isSelected,
+                      onSelected: (_) => setState(() => _chartFilter = filter),
+                      backgroundColor: Colors.white,
+                      selectedColor: _kBrand,
+                      checkmarkColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(
+                          color: isSelected ? _kBrand : Colors.grey[300]!,
+                        ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                    );
+                  },
+                ).toList(),
               ),
               const SizedBox(height: 16),
               BrandedBarChartCard(
@@ -1746,13 +1746,15 @@ class _SpendAdvisorBanner extends StatelessWidget {
     final String headline;
     final String detail;
     if (isOverBudget) {
-      headline = 'Over Budget by ${currency.format(safeToSpend.abs())} this cycle';
+      headline =
+          'Over Budget by ${currency.format(safeToSpend.abs())} this cycle';
       detail =
           'Cycle: $cycleLabel\n'
           '${currency.format(owed)} still owed  •  ${currency.format(paid)} already paid\n'
           'Your installment obligations exceed your income for this cycle. Avoid new purchases.';
     } else {
-      headline = '${status.label}: ${currency.format(safeToSpend)} remaining this cycle';
+      headline =
+          '${status.label}: ${currency.format(safeToSpend)} remaining this cycle';
       detail =
           'Cycle: $cycleLabel  ·  ${status.tierName}\n'
           '${currency.format(owed)} still owed  •  ${currency.format(paid)} already paid\n'
@@ -1877,11 +1879,7 @@ class _IncomeBarCard extends StatelessWidget {
                       color: Colors.blue[50],
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
-                      Icons.edit,
-                      color: Colors.blue,
-                      size: 20,
-                    ),
+                    child: const Icon(Icons.edit, color: Colors.blue, size: 20),
                   ),
                 ),
               ),
@@ -2113,7 +2111,10 @@ class _CategoryRow extends StatelessWidget {
               child: Text(
                 slice.category,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
             ),
             Text(
@@ -2187,7 +2188,9 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
           status: pr.lateFee > 0 ? 'LATE' : 'UPCOMING',
           statusBg: pr.lateFee > 0 ? Colors.red[50]! : Colors.grey[200]!,
           statusFg: pr.lateFee > 0 ? Colors.red : Colors.black87,
-          icon: pr.lateFee > 0 ? Icons.warning_amber_rounded : Icons.access_time,
+          icon: pr.lateFee > 0
+              ? Icons.warning_amber_rounded
+              : Icons.access_time,
         ),
       );
     }
@@ -2246,12 +2249,10 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
 
     if (!mounted) return;
     if (didComplete) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Installment fully paid! Moved to History. 🎉'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
+      showDesktopSnackBar(
+        context,
+        message: 'Installment fully paid! Moved to History. 🎉',
+        backgroundColor: Colors.green,
       );
       Navigator.pop(context);
     } else {
@@ -2291,9 +2292,7 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
     await _inst.delete();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Installment deleted')),
-    );
+    showDesktopSnackBar(context, message: 'Installment deleted');
     Navigator.pop(context);
   }
 
@@ -2383,7 +2382,10 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
                 children: [
                   Expanded(
                     flex: 5,
-                    child: _PaymentTimelineColumn(entries: timeline, currency: _currency),
+                    child: _PaymentTimelineColumn(
+                      entries: timeline,
+                      currency: _currency,
+                    ),
                   ),
                   VerticalDivider(width: 1, color: Colors.grey[200]),
                   Expanded(
@@ -2483,9 +2485,7 @@ class _TimelineTile extends StatelessWidget {
                   ),
                 ),
                 if (!isLast)
-                  Expanded(
-                    child: Container(width: 2, color: Colors.grey[200]),
-                  ),
+                  Expanded(child: Container(width: 2, color: Colors.grey[200])),
               ],
             ),
           ),
@@ -2596,7 +2596,8 @@ class _DebtBreakdownColumn extends StatelessWidget {
     final regularPeriodsToPay = PenaltyEngine.calculateActualPeriodsToPay(
       installment,
     ).clamp(0, installment.totalPayments - installment.paidPayments);
-    final fullPeriodsToPay = installment.totalPayments - installment.paidPayments;
+    final fullPeriodsToPay =
+        installment.totalPayments - installment.paidPayments;
     final regularCost =
         (installment.monthlyPayment * regularPeriodsToPay) + penalty.lateFee;
     final fullCost =
@@ -2642,154 +2643,212 @@ class _DebtBreakdownColumn extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isAccelerated ? Colors.red : Colors.grey[200]!,
-                  width: isAccelerated ? 2 : 1,
+            if (isPaid)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FAF0),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.green.withValues(alpha: 0.25),
+                  ),
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (isAccelerated) ...[
-                    const Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
-                        SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'DEFAULT STATUS: ENTIRE BALANCE DUE',
-                            style: TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Plan Fully Paid 🎉',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Color(0xFF1B8A4C),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isAccelerated ? Colors.red : Colors.grey[200]!,
+                    width: isAccelerated ? 2 : 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isAccelerated) ...[
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.red,
+                            size: 18,
+                          ),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'DEFAULT STATUS: ENTIRE BALANCE DUE',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
                             ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    const Text(
+                      'MONTHLY PAYMENT',
+                      style: TextStyle(
+                        color: Colors.black87,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      currency.format(installment.monthlyPayment),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_today,
+                          size: 13,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Due ${installment.dueDate.day}th of every month',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                  ],
-                  const Text(
-                    'MONTHLY PAYMENT',
-                    style: TextStyle(
-                      color: Colors.black87,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    currency.format(installment.monthlyPayment),
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today, size: 13, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Due ${installment.dueDate.day}th of every month',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                      ),
+                    if (!isPaid) ...[
+                      const SizedBox(height: 16),
+                      if (isAccelerated) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () => onPay(regularPeriodsToPay),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.black,
+                              side: BorderSide(color: Colors.grey[300]!),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: Text(
+                              'Pay $regularPeriodsToPay Arrears (${currency.format(regularCost)})',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => onPay(fullPeriodsToPay),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: Text(
+                              'Settle Full Debt (${currency.format(fullCost)})',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ] else
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => onPay(regularPeriodsToPay),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _kBrand,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: Text(
+                              regularPeriodsToPay > 1
+                                  ? 'Pay $regularPeriodsToPay Arrears (${currency.format(regularCost)})'
+                                  : 'Mark as Paid (${currency.format(regularCost)})',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
                     ],
-                  ),
-                  if (!isPaid) ...[
-                    const SizedBox(height: 16),
-                    if (isAccelerated) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => onPay(regularPeriodsToPay),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black,
-                            side: BorderSide(color: Colors.grey[300]!),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: Text(
-                            'Pay $regularPeriodsToPay Arrears (${currency.format(regularCost)})',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => onPay(fullPeriodsToPay),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: Text(
-                            'Settle Full Debt (${currency.format(fullCost)})',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    ] else
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => onPay(regularPeriodsToPay),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black,
-                            side: BorderSide(color: Colors.grey[300]!),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: Text(
-                            regularPeriodsToPay > 1
-                                ? 'Pay $regularPeriodsToPay Arrears (${currency.format(regularCost)})'
-                                : 'Mark as Paid (${currency.format(regularCost)})',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
                   ],
-                ],
+                ),
               ),
-            ),
             if (canDelete) ...[
               const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
+              Center(
+                child: TextButton.icon(
                   onPressed: onDelete,
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text(
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text(
                     'Delete Installment',
                     style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ),
@@ -2812,7 +2871,11 @@ class _BreakdownStat extends StatelessWidget {
   final String value;
   final Widget? trailing;
 
-  const _BreakdownStat({required this.label, required this.value, this.trailing});
+  const _BreakdownStat({
+    required this.label,
+    required this.value,
+    this.trailing,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2833,10 +2896,7 @@ class _BreakdownStat extends StatelessWidget {
           value,
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
-        if (trailing != null) ...[
-          const SizedBox(height: 10),
-          trailing!,
-        ],
+        if (trailing != null) ...[const SizedBox(height: 10), trailing!],
       ],
     );
   }

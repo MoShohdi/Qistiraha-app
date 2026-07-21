@@ -147,6 +147,36 @@ class DesktopEmptyDetail extends StatelessWidget {
   }
 }
 
+/// Shows a compact, floating toast anchored to the bottom-right corner
+/// instead of the mobile default of stretching a `SnackBar` full-width
+/// across the bottom of the screen — matches the "modern web toast"
+/// convention users expect from a desktop app.
+void showDesktopSnackBar(
+  BuildContext context, {
+  required String message,
+  Color? backgroundColor,
+  double width = 400,
+}) {
+  final screenWidth = MediaQuery.sizeOf(context).width;
+  const rightMargin = 24.0;
+  final leftMargin = (screenWidth - width - rightMargin).clamp(
+    24.0,
+    double.infinity,
+  );
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      backgroundColor: backgroundColor,
+      behavior: SnackBarBehavior.floating,
+      margin: EdgeInsets.only(
+        left: leftMargin,
+        right: rightMargin,
+        bottom: 24,
+      ),
+    ),
+  );
+}
+
 /// Standard desktop interactive-card chrome: click cursor, a subtle border
 /// that appears on hover (or when [selected]), and a soft lift shadow while
 /// hovered. Purely presentational — wrap any card/list-tile/nav-item that
