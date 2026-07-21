@@ -292,31 +292,25 @@ class _InstallmentDesktopFormState extends State<_InstallmentDesktopForm> {
   void _saveInstallment() async {
     if (_formKey.currentState!.validate() && _selectedDate != null) {
       try {
-        int mMultiplier = 1;
-        if (widget.isLongTerm) {
-          switch (_selectedFrequency) {
-            case 'Quarterly':
-              mMultiplier = 3;
-              break;
-            case 'Semi-Annually':
-              mMultiplier = 6;
-              break;
-            case 'Annually':
-              mMultiplier = 12;
-              break;
-          }
-        }
+        final mMultiplier = widget.isLongTerm
+            ? Installment.monthsPerPaymentFor(_selectedFrequency)
+            : 1;
 
         int paidPeriods = int.tryParse(_paidPeriodsController.text) ?? 0;
         int calculatedPaidMonths = _isLegacy ? (paidPeriods * mMultiplier) : 0;
 
+        // _installmentsController holds the number of PAYMENT PERIODS at the
+        // selected frequency (e.g. "8" quarters), not raw calendar months —
+        // convert to real total months here so Installment.totalMonths /
+        // monthsPerPayment yields back that same period count everywhere
+        // else (payment timeline, progress bars, remaining-debt math).
         await _controller.saveInstallment(
           storeName: _storeNameController.text.isNotEmpty
               ? _storeNameController.text
               : (_selectedProvider ?? 'Unknown Store'),
           itemDescription: _itemDescController.text,
           totalAmount: double.parse(_totalAmountController.text),
-          totalMonths: int.parse(_installmentsController.text),
+          totalMonths: int.parse(_installmentsController.text) * mMultiplier,
           monthlyPayment: _calculatedMonthly,
           dueDate: _selectedDate!,
           downPayment: double.tryParse(_downPaymentController.text) ?? 0.0,
@@ -671,11 +665,26 @@ class _InstallmentDesktopFormState extends State<_InstallmentDesktopForm> {
   }
 
   Widget _buildStep2() {
+    final currentFrequency = widget.isLongTerm ? _selectedFrequency : 'Monthly';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _stepTitle('Financials', 'Set the total cost and repayment schedule.'),
         const SizedBox(height: 24),
+        if (widget.isLongTerm) ...[
+          _buildLabel('Payment Frequency'),
+          DropdownButtonFormField<String>(
+            value: _selectedFrequency,
+            decoration: _fieldDecoration(),
+            items: _frequencies
+                .map((freq) => DropdownMenuItem(value: freq, child: Text(freq)))
+                .toList(),
+            onChanged: (val) {
+              if (val != null) setState(() => _selectedFrequency = val);
+            },
+          ),
+          const SizedBox(height: 20),
+        ],
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -712,9 +721,7 @@ class _InstallmentDesktopFormState extends State<_InstallmentDesktopForm> {
         ),
         const SizedBox(height: 20),
         _buildLabel(
-          widget.isLongTerm && _selectedFrequency != 'Monthly'
-              ? 'Installments (Payments)'
-              : 'Installments (Months)',
+          'Installments (${Installment.periodNounPluralFor(currentFrequency)})',
         ),
         Wrap(
           spacing: 10,
@@ -722,7 +729,7 @@ class _InstallmentDesktopFormState extends State<_InstallmentDesktopForm> {
           children: [
             ..._monthPresets.map(
               (months) => _presetChip(
-                '$months Months',
+                '$months ${Installment.periodNounPluralFor(currentFrequency)}',
                 selected: _selectedPresetMonths == months && !_showCustomMonths,
                 onTap: () {
                   setState(() {
@@ -775,7 +782,7 @@ class _InstallmentDesktopFormState extends State<_InstallmentDesktopForm> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Monthly Payment',
+                Installment.paymentFrequencyLabelFor(currentFrequency),
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
@@ -808,20 +815,6 @@ class _InstallmentDesktopFormState extends State<_InstallmentDesktopForm> {
           'Final details before we save this plan.',
         ),
         const SizedBox(height: 24),
-        if (widget.isLongTerm) ...[
-          _buildLabel('Payment Frequency'),
-          DropdownButtonFormField<String>(
-            value: _selectedFrequency,
-            decoration: _fieldDecoration(),
-            items: _frequencies
-                .map((freq) => DropdownMenuItem(value: freq, child: Text(freq)))
-                .toList(),
-            onChanged: (val) {
-              if (val != null) setState(() => _selectedFrequency = val);
-            },
-          ),
-          const SizedBox(height: 20),
-        ],
         _buildLabel('Category'),
         DropdownButtonFormField<String>(
           value: _selectedCategory,
