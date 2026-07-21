@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/services/hive_service.dart';
@@ -10,7 +11,6 @@ import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
 import 'package:qistiraha/features/auth/screens/login_screen_desktop.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
-import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
 import 'merchant_customer_profile_screen.dart';
 import 'merchant_installment_details_desktop.dart';
 import 'merchant_portal_screen.dart';
@@ -20,17 +20,33 @@ const _kBrandDark = Color(0xFF5A75AD);
 const _kBg = Color(0xFFF8F9FA);
 const _kSidebarWidth = 260.0;
 
+/// Crisp desktop corner radius — the "8-12px" mandate for a modern B2B
+/// surface, as opposed to the rounder, larger radii mobile UIs tend to use.
+const _kCardRadius = 10.0;
+
+/// A soft, diffused resting shadow — enough depth to lift a card off the
+/// page without the heavy, high-opacity elevation mobile Material widgets
+/// default to.
+List<BoxShadow> get _kCardShadow => [
+  BoxShadow(
+    color: Colors.black.withValues(alpha: 0.04),
+    blurRadius: 20,
+    offset: const Offset(0, 6),
+  ),
+];
+
 enum _MerchantNav { overview, customers, active, insights }
 
 enum _ActiveFilter { all, overdue, pending, paid }
 
 /// Desktop/web shell for the merchant side — a fixed sidebar (store identity,
 /// the primary "Generate Payment Link" action, and section navigation) next
-/// to a main content area that reflows per section: a KPI grid for Overview,
+/// to a main content area that reflows per section: a data-dense Overview
+/// (KPIs, revenue trend, upcoming-installments table), premium inbox-style
 /// master-detail layouts for Customers/Active Installments, and a dashboard
-/// grid for Insights. Reuses the same Hive-backed data and, for the detail
-/// panes, the exact same mobile screens (embedded via [EmbeddedScreen]) so
-/// there is a single source of truth for that logic.
+/// grid for Insights. Reuses the same Hive-backed data throughout; the
+/// Active Installments detail pane renders the desktop-native
+/// [MerchantInstallmentDetailsDesktop] (ported logic, not the mobile screen).
 class MerchantDashboardDesktop extends StatefulWidget {
   const MerchantDashboardDesktop({super.key});
 
@@ -169,17 +185,17 @@ class _Sidebar extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    width: 44,
-                    height: 44,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
                       color: Colors.black,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(_kCardRadius),
                     ),
                     alignment: Alignment.center,
                     child: const Icon(
                       Icons.storefront,
                       color: Colors.white,
-                      size: 20,
+                      size: 19,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -192,7 +208,7 @@ class _Sidebar extends StatelessWidget {
                           business.businessName,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 15,
+                            fontSize: 14.5,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -200,7 +216,7 @@ class _Sidebar extends StatelessWidget {
                           business.category,
                           style: TextStyle(
                             color: Colors.grey[600],
-                            fontSize: 12,
+                            fontSize: 11.5,
                           ),
                         ),
                       ],
@@ -225,31 +241,31 @@ class _Sidebar extends StatelessWidget {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.qr_code, size: 18),
+                    icon: const Icon(Icons.qr_code, size: 17),
                     label: const Text(
                       'Generate Payment Link',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: 12.5,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1E2337),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(_kCardRadius),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             const Divider(height: 1),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
                 children: [
                   _NavItem(
                     icon: Icons.dashboard_outlined,
@@ -280,7 +296,7 @@ class _Sidebar extends StatelessWidget {
             ),
             const Divider(height: 1),
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               child: _NavItem(
                 icon: Icons.logout,
                 label: 'Log Out',
@@ -328,23 +344,23 @@ class _NavItemState extends State<_NavItem> {
         : (_hovering ? Colors.grey[100]! : Colors.transparent);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 3),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hovering = true),
         onExit: (_) => setState(() => _hovering = false),
         child: Material(
           color: bg,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           child: InkWell(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             onTap: widget.onTap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
               child: Row(
                 children: [
-                  Icon(widget.icon, size: 19, color: fg),
-                  const SizedBox(width: 12),
+                  Icon(widget.icon, size: 18, color: fg),
+                  const SizedBox(width: 11),
                   Expanded(
                     child: Text(
                       widget.label,
@@ -353,7 +369,7 @@ class _NavItemState extends State<_NavItem> {
                         fontWeight: widget.selected
                             ? FontWeight.bold
                             : FontWeight.w500,
-                        fontSize: 13.5,
+                        fontSize: 13,
                       ),
                     ),
                   ),
@@ -368,7 +384,142 @@ class _NavItemState extends State<_NavItem> {
 }
 
 // ---------------------------------------------------------------------------
-// Overview — KPI + upcoming-installments grid
+// Shared: dense stat card, inbox-style row chrome
+// ---------------------------------------------------------------------------
+class _DesktopStatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _DesktopStatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(_kCardRadius),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: _kCardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 17),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Premium "web inbox" row chrome (Superhuman/Gmail-style): a colored left
+/// accent bar and faint tint when selected, a subtle hover tint at rest, and
+/// a hairline bottom divider — deliberately no shadow or rounded corners per
+/// row, since the containing panel already carries the card-level depth.
+class _InboxRowChrome extends StatefulWidget {
+  final Widget child;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _InboxRowChrome({
+    required this.child,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  State<_InboxRowChrome> createState() => _InboxRowChromeState();
+}
+
+class _InboxRowChromeState extends State<_InboxRowChrome> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg = widget.selected
+        ? _kBrand.withValues(alpha: 0.08)
+        : (_hovering ? Colors.grey[50]! : Colors.white);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: bg,
+            border: Border(
+              left: BorderSide(
+                color: widget.selected ? _kBrand : Colors.transparent,
+                width: 3,
+              ),
+              bottom: BorderSide(color: Colors.grey[100]!, width: 1),
+            ),
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+/// The white, bordered panel every master-detail pane (list and detail side
+/// alike) sits inside — the single source of "card" depth for these layouts,
+/// so individual rows can stay flush and flat.
+class _PanelFrame extends StatelessWidget {
+  final Widget child;
+  const _PanelFrame({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(_kCardRadius),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: _kCardShadow,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Overview — KPIs, revenue trend line chart, upcoming-installments table
 // ---------------------------------------------------------------------------
 class _OverviewGrid extends StatefulWidget {
   final List<Installment> plans;
@@ -404,6 +555,51 @@ class _OverviewGridState extends State<_OverviewGrid> {
     return sum + (i.paidPayments * i.monthlyPayment);
   });
 
+  /// Reconstructs a 6-month revenue trend from each plan's completed
+  /// payments. There's no per-payment timestamp in the model beyond the
+  /// most recent one, so — exactly like the payment-history views — each
+  /// past payment's date is approximated backward from `dueDate` in
+  /// payment-period increments.
+  List<double> _revenueTrend() {
+    final buckets = List<double>.filled(6, 0.0);
+    final now = TimeService.now();
+
+    for (final inst in widget.plans) {
+      final paid = inst.paidPayments;
+      if (paid <= 0) continue;
+
+      for (int i = 0; i < paid; i++) {
+        final amount = i < inst.pastPayments.length
+            ? inst.pastPayments[i]
+            : inst.monthlyPayment;
+        final approxDate = inst.dueDate.subtract(
+          Duration(days: 30 * inst.monthsPerPayment * (paid - i)),
+        );
+        final monthsAgo =
+            (now.year - approxDate.year) * 12 + (now.month - approxDate.month);
+        if (monthsAgo >= 0 && monthsAgo < 6) {
+          buckets[5 - monthsAgo] += amount;
+        }
+      }
+    }
+    return buckets;
+  }
+
+  /// Overdue plans first, then anything due within the next 3 days — the
+  /// short list of things that actually need attention right now.
+  List<Installment> _urgentAlerts(List<Installment> upcoming) {
+    final now = TimeService.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final urgent = upcoming.where((i) {
+      final due = DateTime(i.dueDate.year, i.dueDate.month, i.dueDate.day);
+      final isOverdue = i.statusEnum == InstallmentStatus.overdue;
+      final daysUntilDue = due.difference(today).inDays;
+      return isOverdue || (daysUntilDue >= 0 && daysUntilDue <= 3);
+    }).toList();
+    urgent.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    return urgent.take(6).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final upcoming =
@@ -411,6 +607,14 @@ class _OverviewGridState extends State<_OverviewGrid> {
             .where((i) => i.statusEnum != InstallmentStatus.paid)
             .toList()
           ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    final urgentAlerts = _urgentAlerts(upcoming);
+
+    final trend = _revenueTrend();
+    final now = TimeService.now();
+    final trendLabels = List.generate(
+      6,
+      (i) => DateFormat('MMM').format(DateTime(now.year, now.month - (5 - i))),
+    );
 
     return DesktopCenteredContent(
       child: Scrollbar(
@@ -418,15 +622,15 @@ class _OverviewGridState extends State<_OverviewGrid> {
         thumbVisibility: true,
         child: SingleChildScrollView(
           controller: _scrollController,
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.all(28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
                 'Overview',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
               IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -439,7 +643,7 @@ class _OverviewGridState extends State<_OverviewGrid> {
                         color: _kBrand,
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _DesktopStatCard(
                         label: 'Total Received',
@@ -451,45 +655,34 @@ class _OverviewGridState extends State<_OverviewGrid> {
                   ],
                 ),
               ),
-              const SizedBox(height: 36),
-              const Text(
-                'Upcoming Installments',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              const SizedBox(height: 18),
+              _RevenueLineChartCard(
+                buckets: trend,
+                labels: trendLabels,
+                currency: widget.currency,
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Across all customers, soonest first',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              if (upcoming.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text(
-                    'No upcoming installments yet.',
-                    style: TextStyle(color: Colors.grey[500]),
-                  ),
-                )
-              else
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: upcoming.length,
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 380,
-                    mainAxisExtent: 136,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemBuilder: (context, index) {
-                    final inst = upcoming[index];
-                    return _UpcomingDesktopCard(
-                      installment: inst,
+              const SizedBox(height: 18),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: _UpcomingInstallmentsTable(
+                      installments: upcoming,
                       currency: widget.currency,
-                      onTap: () => widget.onSelectInstallment(inst),
-                    );
-                  },
-                ),
+                      onSelect: widget.onSelectInstallment,
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    flex: 2,
+                    child: _RecentAlertsCard(
+                      alerts: urgentAlerts,
+                      onSelect: widget.onSelectInstallment,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -498,61 +691,171 @@ class _OverviewGridState extends State<_OverviewGrid> {
   }
 }
 
-class _DesktopStatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
+class _RevenueLineChartCard extends StatelessWidget {
+  final List<double> buckets;
+  final List<String> labels;
+  final NumberFormat currency;
 
-  const _DesktopStatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
+  const _RevenueLineChartCard({
+    required this.buckets,
+    required this.labels,
+    required this.currency,
   });
 
   @override
   Widget build(BuildContext context) {
+    final maxVal = buckets.isEmpty
+        ? 0.0
+        : buckets.reduce((a, b) => a > b ? a : b);
+    final maxY = maxVal > 0 ? maxVal * 1.25 : 1000.0;
+
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_kCardRadius),
         border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: _kCardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Icon(icon, color: color, size: 19),
+          const Text(
+            'Revenue Trend',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 2),
           Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+            'Collected revenue over the last 6 months',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
           ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 180,
+            child: LineChart(
+              LineChartData(
+                minX: 0,
+                maxX: (buckets.length - 1).toDouble(),
+                minY: 0,
+                maxY: maxY,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: maxY / 4,
+                  getDrawingHorizontalLine: (v) =>
+                      FlLine(color: Colors.grey[100], strokeWidth: 1),
+                ),
+                borderData: FlBorderData(show: false),
+                titlesData: FlTitlesData(
+                  show: true,
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 26,
+                      interval: 1,
+                      getTitlesWidget: (value, meta) {
+                        final i = value.round();
+                        if ((value - i).abs() > 0.01 ||
+                            i < 0 ||
+                            i >= labels.length) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            labels[i],
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 42,
+                      interval: maxY / 4,
+                      getTitlesWidget: (value, meta) {
+                        String text;
+                        if (value == 0) {
+                          text = '0';
+                        } else if (value >= 1000) {
+                          text =
+                              '${(value / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
+                        } else {
+                          text = value.toStringAsFixed(0);
+                        }
+                        return Text(
+                          text,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[500],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (spots) => spots
+                        .map(
+                          (s) => LineTooltipItem(
+                            currency.format(s.y),
+                            const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: [
+                      for (int i = 0; i < buckets.length; i++)
+                        FlSpot(i.toDouble(), buckets[i]),
+                    ],
+                    isCurved: true,
+                    curveSmoothness: 0.3,
+                    color: _kBrand,
+                    barWidth: 2.5,
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, bar, index) =>
+                          FlDotCirclePainter(
+                            radius: 3,
+                            color: _kBrandDark,
+                            strokeWidth: 2,
+                            strokeColor: Colors.white,
+                          ),
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          _kBrand.withValues(alpha: 0.22),
+                          _kBrand.withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -561,67 +864,343 @@ class _DesktopStatCard extends StatelessWidget {
   }
 }
 
-class _UpcomingDesktopCard extends StatelessWidget {
-  final Installment installment;
+class _UpcomingInstallmentsTable extends StatefulWidget {
+  final List<Installment> installments;
   final NumberFormat currency;
+  final ValueChanged<Installment> onSelect;
+
+  const _UpcomingInstallmentsTable({
+    required this.installments,
+    required this.currency,
+    required this.onSelect,
+  });
+
+  @override
+  State<_UpcomingInstallmentsTable> createState() =>
+      _UpcomingInstallmentsTableState();
+}
+
+class _UpcomingInstallmentsTableState
+    extends State<_UpcomingInstallmentsTable> {
+  int? _pressedIndex;
+
+  /// Flashes the tapped row with a brand tint before navigating, so the
+  /// click reads as a deliberate, tactile action instead of an instant,
+  /// "dead" jump straight to the detail pane.
+  void _handleTap(Installment inst, int index) {
+    setState(() => _pressedIndex = index);
+    Future.delayed(const Duration(milliseconds: 140), () {
+      if (!mounted) return;
+      setState(() => _pressedIndex = null);
+      widget.onSelect(inst);
+    });
+  }
+
+  DataRow _buildRow(Installment inst, int index) {
+    final isOverdue = inst.statusEnum == InstallmentStatus.overdue;
+    final statusColor = isOverdue ? Colors.red : _kBrand;
+    final statusLabel = isOverdue ? 'Overdue' : 'Pending';
+    final isPressed = index == _pressedIndex;
+
+    Widget cursor(Widget child) =>
+        MouseRegion(cursor: SystemMouseCursors.click, child: child);
+
+    return DataRow(
+      color: WidgetStateProperty.resolveWith((states) {
+        if (isPressed) return _kBrand.withValues(alpha: 0.16);
+        if (states.contains(WidgetState.hovered)) return Colors.grey[50];
+        return index.isEven ? Colors.white : const Color(0xFFFAFBFC);
+      }),
+      onSelectChanged: (_) => _handleTap(inst, index),
+      cells: [
+        DataCell(
+          cursor(
+            Text(
+              inst.customerName ?? 'Customer',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        DataCell(
+          cursor(Text(inst.itemDescription, overflow: TextOverflow.ellipsis)),
+        ),
+        DataCell(
+          cursor(
+            Text(
+              isOverdue
+                  ? 'Overdue since ${DateFormat('dd MMM').format(inst.dueDate)}'
+                  : DateFormat('dd MMM yyyy').format(inst.dueDate),
+              style: TextStyle(
+                color: isOverdue ? Colors.red[700] : Colors.black87,
+                fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ),
+        ),
+        DataCell(
+          cursor(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                statusLabel,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ),
+        DataCell(
+          cursor(
+            Text(
+              widget.currency.format(inst.monthlyPayment),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _PanelFrame(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Upcoming Installments',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Across all customers, soonest first',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (widget.installments.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Text(
+                  'No upcoming installments yet.',
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
+              ),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                showCheckboxColumn: false,
+                headingRowHeight: 36,
+                dataRowMinHeight: 44,
+                dataRowMaxHeight: 44,
+                columnSpacing: 28,
+                horizontalMargin: 20,
+                headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
+                headingTextStyle: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[600],
+                  letterSpacing: 0.4,
+                ),
+                dataTextStyle: const TextStyle(
+                  fontSize: 13,
+                  color: Colors.black87,
+                ),
+                columns: const [
+                  DataColumn(label: Text('CUSTOMER')),
+                  DataColumn(label: Text('ITEM')),
+                  DataColumn(label: Text('DUE DATE')),
+                  DataColumn(label: Text('STATUS')),
+                  DataColumn(label: Text('AMOUNT'), numeric: true),
+                ],
+                rows: [
+                  for (int i = 0; i < widget.installments.length; i++)
+                    _buildRow(widget.installments[i], i),
+                ],
+              ),
+            ),
+          const SizedBox(height: 6),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fills the space next to the upcoming-installments table with a short,
+/// real feed of overdue and soon-due plans — the things a merchant actually
+/// needs to act on today, rather than an empty gap.
+class _RecentAlertsCard extends StatelessWidget {
+  final List<Installment> alerts;
+  final ValueChanged<Installment> onSelect;
+
+  const _RecentAlertsCard({required this.alerts, required this.onSelect});
+
+  String _urgencyText(Installment inst) {
+    final now = TimeService.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final due = DateTime(
+      inst.dueDate.year,
+      inst.dueDate.month,
+      inst.dueDate.day,
+    );
+    final days = due.difference(today).inDays;
+    if (inst.statusEnum == InstallmentStatus.overdue) {
+      return 'Overdue by ${-days} day${-days == 1 ? '' : 's'}';
+    }
+    if (days == 0) return 'Due today';
+    return 'Due in $days day${days == 1 ? '' : 's'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _PanelFrame(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.notifications_active_outlined,
+                  size: 17,
+                  color: _kBrandDark,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Recent Alerts',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Overdue and soon-due plans',
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+            const SizedBox(height: 14),
+            if (alerts.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline,
+                      size: 18,
+                      color: Colors.green[400],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'All caught up — nothing urgent.',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              for (int i = 0; i < alerts.length; i++)
+                _AlertRow(
+                  installment: alerts[i],
+                  urgencyText: _urgencyText(alerts[i]),
+                  isLast: i == alerts.length - 1,
+                  onTap: () => onSelect(alerts[i]),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AlertRow extends StatelessWidget {
+  final Installment installment;
+  final String urgencyText;
+  final bool isLast;
   final VoidCallback onTap;
 
-  const _UpcomingDesktopCard({
+  const _AlertRow({
     required this.installment,
-    required this.currency,
+    required this.urgencyText,
+    required this.isLast,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool isOverdue = installment.statusEnum == InstallmentStatus.overdue;
-    return DesktopHoverCard(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    installment.customerName ?? 'Customer',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    installment.itemDescription,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    isOverdue
-                        ? 'Overdue since ${DateFormat('dd MMM').format(installment.dueDate)}'
-                        : 'Due ${DateFormat('dd MMM yyyy').format(installment.dueDate)}',
-                    style: TextStyle(
-                      color: isOverdue ? Colors.red[700] : Colors.grey[500],
-                      fontSize: 12,
-                      fontWeight: isOverdue
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
+    final isOverdue = installment.statusEnum == InstallmentStatus.overdue;
+    final color = isOverdue ? Colors.red : Colors.orange[700]!;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+            decoration: BoxDecoration(
+              border: isLast
+                  ? null
+                  : Border(bottom: BorderSide(color: Colors.grey[100]!)),
             ),
-            const SizedBox(width: 8),
-            Text(
-              currency.format(installment.monthlyPayment),
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            child: Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        installment.customerName ?? 'Customer',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12.5,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        urgencyText,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: 16, color: Colors.grey[400]),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -719,12 +1298,7 @@ class _CustomersMasterDetailState extends State<_CustomersMasterDetail> {
           children: [
             Expanded(
               flex: 2,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(16),
-                ),
+              child: _PanelFrame(
                 child: customers.isEmpty
                     ? Center(
                         child: Text(
@@ -737,7 +1311,6 @@ class _CustomersMasterDetailState extends State<_CustomersMasterDetail> {
                         thumbVisibility: true,
                         child: ListView.builder(
                           controller: _listController,
-                          padding: const EdgeInsets.only(right: 12, bottom: 12),
                           itemCount: customers.length,
                           itemBuilder: (context, index) {
                             final c = customers[index];
@@ -754,72 +1327,75 @@ class _CustomersMasterDetailState extends State<_CustomersMasterDetail> {
                               healthColor = _kBrand;
                             }
 
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: DesktopHoverCard(
-                                selected: c.key == widget.selectedKey,
-                                onTap: () => widget.onSelect(c.key),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Row(
-                                    children: [
-                                      CircleAvatar(
-                                        backgroundColor: healthColor.withValues(
-                                          alpha: 0.15,
+                            return _InboxRowChrome(
+                              selected: c.key == widget.selectedKey,
+                              onTap: () => widget.onSelect(c.key),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: healthColor.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                      child: Icon(
+                                        Icons.person,
+                                        color: healthColor,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            c.name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13.5,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '${c.plans.length} plan${c.plans.length == 1 ? '' : 's'} • ${widget.currency.format(c.outstanding)}',
+                                            style: TextStyle(
+                                              color: Colors.grey[500],
+                                              fontSize: 11.5,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: healthColor.withValues(
+                                          alpha: 0.1,
                                         ),
-                                        child: Icon(
-                                          Icons.person,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        healthLabel,
+                                        style: TextStyle(
                                           color: healthColor,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      const SizedBox(width: 14),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              c.name,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              '${c.plans.length} plan${c.plans.length == 1 ? '' : 's'} • Outstanding ${widget.currency.format(c.outstanding)}',
-                                              style: TextStyle(
-                                                color: Colors.grey[600],
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: healthColor.withValues(
-                                            alpha: 0.12,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          healthLabel,
-                                          style: TextStyle(
-                                            color: healthColor,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             );
@@ -833,13 +1409,7 @@ class _CustomersMasterDetailState extends State<_CustomersMasterDetail> {
             const SizedBox(width: 16),
             Expanded(
               flex: 3,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey[200]!),
-                ),
-                clipBehavior: Clip.antiAlias,
+              child: _PanelFrame(
                 child: selected == null
                     ? const DesktopEmptyDetail(
                         icon: Icons.person_search_outlined,
@@ -919,25 +1489,23 @@ class _ActiveMasterDetailState extends State<_ActiveMasterDetail> {
           children: [
             Expanded(
               flex: 2,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(16),
-                ),
+              child: _PanelFrame(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        _filterChip('All', _ActiveFilter.all),
-                        _filterChip('Overdue', _ActiveFilter.overdue),
-                        _filterChip('Pending', _ActiveFilter.pending),
-                        _filterChip('Paid', _ActiveFilter.paid),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          _filterChip('All', _ActiveFilter.all),
+                          _filterChip('Overdue', _ActiveFilter.overdue),
+                          _filterChip('Pending', _ActiveFilter.pending),
+                          _filterChip('Paid', _ActiveFilter.paid),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
+                    const Divider(height: 1),
                     Expanded(
                       child: filtered.isEmpty
                           ? Center(
@@ -951,21 +1519,14 @@ class _ActiveMasterDetailState extends State<_ActiveMasterDetail> {
                               thumbVisibility: true,
                               child: ListView.builder(
                                 controller: _listController,
-                                padding: const EdgeInsets.only(
-                                  right: 12,
-                                  bottom: 12,
-                                ),
                                 itemCount: filtered.length,
                                 itemBuilder: (context, index) {
                                   final p = filtered[index];
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: _ActiveDesktopCard(
-                                      installment: p,
-                                      currency: widget.currency,
-                                      selected: widget.selected?.id == p.id,
-                                      onTap: () => widget.onSelect(p),
-                                    ),
+                                  return _ActiveInboxRow(
+                                    installment: p,
+                                    currency: widget.currency,
+                                    selected: widget.selected?.id == p.id,
+                                    onTap: () => widget.onSelect(p),
                                   );
                                 },
                               ),
@@ -980,13 +1541,7 @@ class _ActiveMasterDetailState extends State<_ActiveMasterDetail> {
             const SizedBox(width: 16),
             Expanded(
               flex: 3,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey[200]!),
-                ),
-                clipBehavior: Clip.antiAlias,
+              child: _PanelFrame(
                 child: widget.selected == null
                     ? const DesktopEmptyDetail(
                         icon: Icons.receipt_long,
@@ -1030,13 +1585,13 @@ class _ActiveMasterDetailState extends State<_ActiveMasterDetail> {
   }
 }
 
-class _ActiveDesktopCard extends StatelessWidget {
+class _ActiveInboxRow extends StatelessWidget {
   final Installment installment;
   final NumberFormat currency;
   final bool selected;
   final VoidCallback onTap;
 
-  const _ActiveDesktopCard({
+  const _ActiveInboxRow({
     required this.installment,
     required this.currency,
     required this.selected,
@@ -1066,11 +1621,11 @@ class _ActiveDesktopCard extends StatelessWidget {
         break;
     }
 
-    return DesktopHoverCard(
+    return _InboxRowChrome(
       selected: selected,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1081,64 +1636,66 @@ class _ActiveDesktopCard extends StatelessWidget {
                   child: Text(
                     installment.itemDescription,
                     style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
+                    horizontal: 8,
+                    vertical: 3,
                   ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     statusLabel,
                     style: TextStyle(
                       color: statusColor,
-                      fontSize: 11,
+                      fontSize: 10.5,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               installment.customerName ?? 'Customer',
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              style: TextStyle(color: Colors.grey[500], fontSize: 11.5),
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${installment.paidPayments} of ${installment.totalPayments} paid',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  '${installment.paidPayments}/${installment.totalPayments} paid',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 11),
                 ),
                 Text(
                   currency.format(installment.monthlyPayment),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: 13,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               child: LinearProgressIndicator(
                 value: installment.totalPayments > 0
                     ? installment.paidPayments / installment.totalPayments
                     : 0.0,
                 backgroundColor: Colors.grey[200],
                 color: statusColor,
-                minHeight: 6,
+                minHeight: 4,
               ),
             ),
           ],
@@ -1215,6 +1772,36 @@ class _InsightsGridState extends State<_InsightsGrid> {
 
   double get _onTimePct =>
       widget.plans.isEmpty ? 1.0 : _onTimeCount / widget.plans.length;
+
+  /// Reconstructs a 6-month revenue trend from each plan's completed
+  /// payments. There's no per-payment timestamp in the model beyond the
+  /// most recent one, so — exactly like the payment-history views — each
+  /// past payment's date is approximated backward from `dueDate` in
+  /// payment-period increments.
+  List<double> _revenueTrend() {
+    final buckets = List<double>.filled(6, 0.0);
+    final now = TimeService.now();
+
+    for (final inst in widget.plans) {
+      final paid = inst.paidPayments;
+      if (paid <= 0) continue;
+
+      for (int i = 0; i < paid; i++) {
+        final amount = i < inst.pastPayments.length
+            ? inst.pastPayments[i]
+            : inst.monthlyPayment;
+        final approxDate = inst.dueDate.subtract(
+          Duration(days: 30 * inst.monthsPerPayment * (paid - i)),
+        );
+        final monthsAgo =
+            (now.year - approxDate.year) * 12 + (now.month - approxDate.month);
+        if (monthsAgo >= 0 && monthsAgo < 6) {
+          buckets[5 - monthsAgo] += amount;
+        }
+      }
+    }
+    return buckets;
+  }
 
   List<double> _projectCashFlow() {
     final buckets = List<double>.filled(6, 0.0);
@@ -1302,6 +1889,11 @@ class _InsightsGridState extends State<_InsightsGrid> {
       6,
       (i) => DateFormat('MMM').format(DateTime(now.year, now.month + i, 1)),
     );
+    final trend = _revenueTrend();
+    final trendLabels = List.generate(
+      6,
+      (i) => DateFormat('MMM').format(DateTime(now.year, now.month - (5 - i))),
+    );
 
     return DesktopCenteredContent(
       child: Scrollbar(
@@ -1309,15 +1901,15 @@ class _InsightsGridState extends State<_InsightsGrid> {
         thumbVisibility: true,
         child: SingleChildScrollView(
           controller: _scrollController,
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.all(28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
                 'Insights',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
               IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1330,7 +1922,7 @@ class _InsightsGridState extends State<_InsightsGrid> {
                         color: _kBrand,
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _DesktopStatCard(
                         label: 'Revenue Collected',
@@ -1339,7 +1931,7 @@ class _InsightsGridState extends State<_InsightsGrid> {
                         color: Colors.green,
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _StoreHealthDesktopCard(
                         onTimePct: _onTimePct,
@@ -1350,14 +1942,15 @@ class _InsightsGridState extends State<_InsightsGrid> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
-              BrandedBarChartCard(
-                title: 'Projected Cash Flow',
-                subtitle: 'Expected collections over the next 6 months',
-                buckets: cashFlow,
-                labels: monthLabels,
+              const SizedBox(height: 18),
+              _RevenueLineChartCard(
+                buckets: trend,
+                labels: trendLabels,
+                currency: widget.currency,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
+              _CashFlowBarChartCard(buckets: cashFlow, labels: monthLabels),
+              const SizedBox(height: 18),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final sideBySide = constraints.maxWidth >= 700;
@@ -1373,7 +1966,7 @@ class _InsightsGridState extends State<_InsightsGrid> {
                     return Column(
                       children: [
                         topSelling,
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 18),
                         activity,
                       ],
                     );
@@ -1382,7 +1975,7 @@ class _InsightsGridState extends State<_InsightsGrid> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(child: topSelling),
-                      const SizedBox(width: 24),
+                      const SizedBox(width: 18),
                       Expanded(child: activity),
                     ],
                   );
@@ -1391,6 +1984,179 @@ class _InsightsGridState extends State<_InsightsGrid> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A dedicated, sleeker bar chart for the merchant Insights dashboard —
+/// gradient rounded-cap bars that grow up from the x-axis on load. Kept
+/// self-contained here rather than reusing the shared `BrandedBarChartCard`
+/// (also used by the consumer dashboard) so this redesign stays scoped to
+/// this file.
+class _CashFlowBarChartCard extends StatelessWidget {
+  final List<double> buckets;
+  final List<String> labels;
+
+  const _CashFlowBarChartCard({required this.buckets, required this.labels});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxBucket = buckets.isEmpty
+        ? 0.0
+        : buckets.reduce((a, b) => a > b ? a : b);
+    final maxY = maxBucket > 0 ? maxBucket * 1.2 : 1000.0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(_kCardRadius),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: _kCardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Projected Cash Flow',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Expected collections over the next 6 months',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 200,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOutCubic,
+              builder: (context, growth, child) {
+                return BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    maxY: maxY,
+                    barTouchData: BarTouchData(
+                      enabled: true,
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          final original =
+                              group.x >= 0 && group.x < buckets.length
+                              ? buckets[group.x]
+                              : rod.toY;
+                          return BarTooltipItem(
+                            original.toStringAsFixed(0),
+                            const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (value, meta) {
+                            final i = value.toInt();
+                            if (i < 0 || i >= labels.length) {
+                              return const SizedBox.shrink();
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                labels[i],
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[800],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 44,
+                          interval: maxY / 5,
+                          getTitlesWidget: (value, meta) {
+                            String text;
+                            if (value == 0) {
+                              text = '0';
+                            } else if (value >= 1000000) {
+                              text =
+                                  '${(value / 1000000).toStringAsFixed(1).replaceAll('.0', '')}M';
+                            } else if (value >= 1000) {
+                              text =
+                                  '${(value / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
+                            } else {
+                              text = value.toStringAsFixed(0);
+                            }
+                            return Text(
+                              text,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey[500],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      horizontalInterval: maxY / 5,
+                      getDrawingHorizontalLine: (value) =>
+                          FlLine(color: Colors.grey[100], strokeWidth: 1),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    barGroups: [
+                      for (int i = 0; i < buckets.length; i++)
+                        BarChartGroupData(
+                          x: i,
+                          barRods: [
+                            BarChartRodData(
+                              toY: buckets[i] * growth,
+                              width: 22,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(8),
+                              ),
+                              gradient: const LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [_kBrand, _kBrandDark],
+                              ),
+                              backDrawRodData: BackgroundBarChartRodData(
+                                show: true,
+                                toY: maxY,
+                                color: Colors.grey[50],
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                  duration: Duration.zero,
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1409,52 +2175,66 @@ class _StoreHealthDesktopCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pctLabel = '${(onTimePct * 100).toStringAsFixed(0)}%';
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_kCardRadius),
         border: Border.all(color: Colors.grey[200]!),
+        boxShadow: _kCardShadow,
       ),
       child: Row(
         children: [
           SizedBox(
-            width: 60,
-            height: 60,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 60,
-                  height: 60,
-                  child: CircularProgressIndicator(
-                    value: onTimePct.clamp(0.0, 1.0),
-                    strokeWidth: 6,
-                    backgroundColor: Colors.grey[200],
-                    valueColor: const AlwaysStoppedAnimation<Color>(_kBrand),
-                  ),
-                ),
-                Text(
-                  pctLabel,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
+            width: 56,
+            height: 56,
+            // Entrance animation: the ring fills clockwise from 0 up to
+            // `onTimePct` on every mount (CircularProgressIndicator always
+            // starts its sweep at 12 o'clock) — and re-animates smoothly to
+            // a new value if the underlying data changes while visible.
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: onTimePct.clamp(0.0, 1.0)),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) {
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: CircularProgressIndicator(
+                        value: value,
+                        strokeWidth: 6,
+                        strokeCap: StrokeCap.round,
+                        backgroundColor: Colors.grey[100],
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          _kBrand,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${(value * 100).round()}%',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Store Health',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 5),
                 Row(
                   children: [
                     _dot(_kBrand),
@@ -1500,24 +2280,25 @@ class _TopSellingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxCount = items.isEmpty ? 0 : items.first.count;
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_kCardRadius),
         border: Border.all(color: Colors.grey[200]!),
+        boxShadow: _kCardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'Top Selling Items',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
           ),
           Text(
             'Ranked by number of active installment plans',
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            style: TextStyle(color: Colors.grey[600], fontSize: 12.5),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           if (items.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1530,7 +2311,7 @@ class _TopSellingCard extends StatelessWidget {
             for (int i = 0; i < items.length; i++)
               Padding(
                 padding: EdgeInsets.only(
-                  bottom: i == items.length - 1 ? 0 : 14,
+                  bottom: i == items.length - 1 ? 0 : 12,
                 ),
                 child: _TopItemRow(
                   rank: i + 1,
@@ -1564,19 +2345,19 @@ class _TopItemRow extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 26,
-          height: 26,
+          width: 24,
+          height: 24,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: _kBrand.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(7),
           ),
           child: Text(
             '$rank',
             style: const TextStyle(
               color: _kBrandDark,
               fontWeight: FontWeight.bold,
-              fontSize: 12,
+              fontSize: 11.5,
             ),
           ),
         ),
@@ -1594,24 +2375,24 @@ class _TopItemRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                        fontSize: 12.5,
                       ),
                     ),
                   ),
                   Text(
                     '${item.count} plan${item.count == 1 ? '' : 's'}',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 11.5),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 5),
               ClipRRect(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(3),
                 child: LinearProgressIndicator(
                   value: progress,
                   backgroundColor: Colors.grey[200],
                   color: _kBrand,
-                  minHeight: 6,
+                  minHeight: 5,
                 ),
               ),
             ],
@@ -1645,24 +2426,25 @@ class _RecentActivityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_kCardRadius),
         border: Border.all(color: Colors.grey[200]!),
+        boxShadow: _kCardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'Recent Activity',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
           ),
           Text(
             'Latest payments — handy for your own records',
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            style: TextStyle(color: Colors.grey[600], fontSize: 12.5),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           if (entries.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1675,7 +2457,7 @@ class _RecentActivityCard extends StatelessWidget {
             for (int i = 0; i < entries.length; i++)
               Padding(
                 padding: EdgeInsets.only(
-                  bottom: i == entries.length - 1 ? 0 : 14,
+                  bottom: i == entries.length - 1 ? 0 : 12,
                 ),
                 child: _buildRow(entries[i]),
               ),
@@ -1691,14 +2473,14 @@ class _RecentActivityCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 30,
-          height: 30,
+          width: 28,
+          height: 28,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: Colors.green.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.check_circle, color: Colors.green, size: 17),
+          child: const Icon(Icons.check_circle, color: Colors.green, size: 16),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -1707,7 +2489,7 @@ class _RecentActivityCard extends StatelessWidget {
             children: [
               Text.rich(
                 TextSpan(
-                  style: const TextStyle(fontSize: 13, color: Colors.black87),
+                  style: const TextStyle(fontSize: 12.5, color: Colors.black87),
                   children: [
                     TextSpan(
                       text: name,
@@ -1723,7 +2505,7 @@ class _RecentActivityCard extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 _timestampLabel(entry.timestamp),
-                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                style: TextStyle(color: Colors.grey[500], fontSize: 11.5),
               ),
             ],
           ),
