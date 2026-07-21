@@ -19,8 +19,6 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
   final _assetNameController = TextEditingController();
   final _priceController = TextEditingController();
   final _termsController = TextEditingController();
-  final _buyerNameController = TextEditingController();
-  final _buyerPhoneController = TextEditingController();
 
   void _generateQR() {
     if (_formKey.currentState!.validate()) {
@@ -31,12 +29,6 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
         item: _assetNameController.text,
         price: double.tryParse(_priceController.text) ?? 0.0,
         months: int.tryParse(_termsController.text) ?? 1,
-        buyerName: _buyerNameController.text.isNotEmpty
-            ? _buyerNameController.text
-            : null,
-        buyerPhone: _buyerPhoneController.text.isNotEmpty
-            ? _buyerPhoneController.text
-            : null,
       );
 
       Navigator.push(
@@ -53,8 +45,6 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
     _assetNameController.dispose();
     _priceController.dispose();
     _termsController.dispose();
-    _buyerNameController.dispose();
-    _buyerPhoneController.dispose();
     super.dispose();
   }
 
@@ -111,30 +101,33 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
                 keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Buyer (optional)',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Colors.grey,
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.verified_user_outlined,
+                      size: 18,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Buyer details are captured automatically from the '
+                        "customer's account when they scan the link.",
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              _buildTextField(
-                'Buyer Name',
-                _buyerNameController,
-                Icons.person_outline,
-                required: false,
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                'Buyer Phone',
-                _buyerPhoneController,
-                Icons.phone,
-                keyboardType: TextInputType.phone,
-                required: false,
-              ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -166,7 +159,6 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
     TextEditingController controller,
     IconData icon, {
     TextInputType? keyboardType,
-    bool required = true,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,9 +184,8 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
               borderSide: BorderSide(color: Colors.grey[300]!),
             ),
           ),
-          validator: required
-              ? (value) => value == null || value.isEmpty ? 'Required' : null
-              : null,
+          validator: (value) =>
+              value == null || value.isEmpty ? 'Required' : null,
         ),
       ],
     );
