@@ -67,9 +67,13 @@ class _IncomeEditBottomSheetState extends State<IncomeEditBottomSheet> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: const InputDecoration(
-                labelText: 'Monthly Income (EGP)',
+                labelText: 'Monthly Income',
                 border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.attach_money),
+                prefixText: 'EGP  ',
+                prefixStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
@@ -79,13 +83,14 @@ class _IncomeEditBottomSheetState extends State<IncomeEditBottomSheet> {
               },
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Salary Deposit Day',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Text(
+              'Salary Deposit Day: ${_salaryDay.round()}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
+                const Text('1', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 Expanded(
                   child: Slider(
                     value: _salaryDay,
@@ -100,10 +105,7 @@ class _IncomeEditBottomSheetState extends State<IncomeEditBottomSheet> {
                     },
                   ),
                 ),
-                Text(
-                  'Day ${_salaryDay.round()}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+                const Text('31', style: TextStyle(color: Colors.grey, fontSize: 12)),
               ],
             ),
             const SizedBox(height: 32),
