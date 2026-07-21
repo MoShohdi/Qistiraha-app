@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'core/services/hive_service.dart';
 import 'core/services/deep_link_service.dart';
+import 'core/utils/responsive_layout.dart';
 import 'features/consumer/screens/home_screen.dart';
 import 'features/consumer/screens/insights_screen.dart';
 import 'features/consumer/screens/history_screen.dart';
 import 'features/consumer/screens/profile_screen.dart';
+import 'features/consumer/screens/consumer_dashboard_desktop.dart';
 
 import 'features/auth/services/auth_service.dart';
 import 'features/auth/models/user_role.dart';
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/merchant/screens/merchant_dashboard_screen.dart';
+import 'features/merchant/screens/merchant_dashboard_desktop.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -69,8 +72,14 @@ class _QistirahaAppState extends State<QistirahaApp> {
       home: !widget.isLoggedIn
           ? const WelcomeScreen()
           : (widget.role == UserRole.merchant
-                ? const MerchantDashboardScreen()
-                : const MainNavigation()),
+                ? const ResponsiveLayout(
+                    mobileWidget: MerchantDashboardScreen(),
+                    desktopWidget: MerchantDashboardDesktop(),
+                  )
+                : const ResponsiveLayout(
+                    mobileWidget: MainNavigation(),
+                    desktopWidget: ConsumerDashboardDesktop(),
+                  )),
     );
   }
 }
