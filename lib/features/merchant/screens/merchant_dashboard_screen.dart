@@ -138,25 +138,65 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                 );
               },
             ),
-            floatingActionButton: FloatingActionButton.extended(
-              backgroundColor: const Color(0xFF1E2337),
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.qr_code),
-              label: const Text(
-                'Generate Payment Link',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => MerchantPortalScreen(business: business),
-                  ),
-                );
-              },
-            ),
+            bottomNavigationBar: _GeneratePaymentLinkDock(business: business),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Fixed dock replacing the old floating action button — a floating button
+/// sat on top of the scrolling lists and covered their last few rows.
+/// Docking it in [Scaffold.bottomNavigationBar] instead makes Scaffold
+/// reserve real layout space for it, so every tab's list naturally stops
+/// above it instead of ever being obscured.
+class _GeneratePaymentLinkDock extends StatelessWidget {
+  final BusinessAccount business;
+  const _GeneratePaymentLinkDock({required this.business});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MerchantPortalScreen(business: business),
+                ),
+              );
+            },
+            icon: const Icon(Icons.qr_code),
+            label: const Text(
+              'Generate Payment Link',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E2337),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -186,7 +226,7 @@ class _OverviewTab extends StatelessWidget {
           ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+      padding: const EdgeInsets.all(20),
       children: [
         Row(
           children: [
@@ -461,7 +501,7 @@ class _CustomersTab extends StatelessWidget {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+      padding: const EdgeInsets.all(20),
       itemCount: customers.length,
       itemBuilder: (context, index) {
         final c = customers[index];
@@ -616,7 +656,7 @@ class _ActiveInstallmentsTabState extends State<_ActiveInstallmentsTab> {
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final p = filtered[index];
