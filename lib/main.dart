@@ -11,6 +11,7 @@ import 'features/consumer/screens/consumer_dashboard_desktop.dart';
 import 'features/auth/services/auth_service.dart';
 import 'features/auth/models/user_role.dart';
 import 'features/auth/screens/welcome_screen.dart';
+import 'features/auth/screens/login_screen_desktop.dart';
 import 'features/merchant/screens/merchant_dashboard_screen.dart';
 import 'features/merchant/screens/merchant_dashboard_desktop.dart';
 
@@ -70,7 +71,10 @@ class _QistirahaAppState extends State<QistirahaApp> {
         ),
       ),
       home: !widget.isLoggedIn
-          ? const WelcomeScreen()
+          ? const ResponsiveLayout(
+              mobileWidget: WelcomeScreen(),
+              desktopWidget: LoginScreenDesktop(),
+            )
           : (widget.role == UserRole.merchant
                 ? const ResponsiveLayout(
                     mobileWidget: MerchantDashboardScreen(),

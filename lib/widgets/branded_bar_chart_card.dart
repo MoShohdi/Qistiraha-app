@@ -13,24 +13,39 @@ class BrandedBarChartCard extends StatelessWidget {
   final List<double> buckets;
   final List<String> labels;
 
+  /// When false, skips the scroll-triggered slide/scale/fade entrance
+  /// (`CardPopIn`) and renders instantly instead. Desktop layouts opt out of
+  /// this — the mobile "sits empty, then pops in" entrance reads as jank on
+  /// a desktop dashboard where everything else renders immediately.
+  final bool animateEntrance;
+
   const BrandedBarChartCard({
     super.key,
     required this.title,
     required this.subtitle,
     required this.buckets,
     required this.labels,
+    this.animateEntrance = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (!animateEntrance) {
+      return _buildCard(context, animate: true);
+    }
+    return CardPopIn(
+      id: 'branded-bar-chart-$title',
+      builder: (context, animate) => _buildCard(context, animate: animate),
+    );
+  }
+
+  Widget _buildCard(BuildContext context, {required bool animate}) {
     final maxBucket = buckets.isEmpty
         ? 0.0
         : buckets.reduce((a, b) => a > b ? a : b);
     final maxY = maxBucket > 0 ? maxBucket * 1.2 : 1000.0;
 
-    return CardPopIn(
-      id: 'branded-bar-chart-$title',
-      builder: (context, animate) => Container(
+    return Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -177,7 +192,6 @@ class BrandedBarChartCard extends StatelessWidget {
             ).popInIf(animate, 1),
           ],
         ),
-      ),
-    );
+      );
   }
 }

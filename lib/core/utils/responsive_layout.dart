@@ -13,7 +13,16 @@ const double kDesktopMaxContentWidth = 1200;
 /// [kDesktopBreakpoint], [mobileWidget] otherwise. Uses [LayoutBuilder] (not
 /// `MediaQuery` alone) so a live window resize on desktop/web is picked up
 /// immediately without needing a hot restart.
-class ResponsiveLayout extends StatelessWidget {
+///
+/// On Flutter web, the browser's real viewport size sometimes isn't measured
+/// yet by the time the very first frame builds — [LayoutBuilder] evaluates
+/// against a stale/default constraint that frame, and nothing then tells this
+/// widget to re-check until something else (like a hot reload) forces a
+/// rebuild. [WidgetsBindingObserver.didChangeMetrics] fires as soon as the
+/// engine reports the real size, and the post-frame callback forces one extra
+/// check right after mount — either is enough to correct course immediately
+/// instead of leaving the mobile layout stretched across the desktop window.
+class ResponsiveLayout extends StatefulWidget {
   final Widget mobileWidget;
   final Widget desktopWidget;
 
@@ -24,12 +33,38 @@ class ResponsiveLayout extends StatelessWidget {
   });
 
   @override
+  State<ResponsiveLayout> createState() => _ResponsiveLayoutState();
+}
+
+class _ResponsiveLayoutState extends State<ResponsiveLayout>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         return constraints.maxWidth >= kDesktopBreakpoint
-            ? desktopWidget
-            : mobileWidget;
+            ? widget.desktopWidget
+            : widget.mobileWidget;
       },
     );
   }
