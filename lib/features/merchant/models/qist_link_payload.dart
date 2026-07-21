@@ -9,8 +9,6 @@ class QistLinkPayload {
   final String item;
   final double price;
   final int months;
-  final String? buyerName;
-  final String? buyerPhone;
 
   const QistLinkPayload({
     required this.planId,
@@ -19,8 +17,6 @@ class QistLinkPayload {
     required this.item,
     required this.price,
     required this.months,
-    this.buyerName,
-    this.buyerPhone,
   });
 
   Uri toUri() {
@@ -34,13 +30,14 @@ class QistLinkPayload {
         'item': item,
         'price': price.toString(),
         'months': months.toString(),
-        if (buyerName != null && buyerName!.isNotEmpty) 'buyerName': buyerName!,
-        if (buyerPhone != null && buyerPhone!.isNotEmpty)
-          'buyerPhone': buyerPhone!,
       },
     );
   }
 
+  /// Buyer identity is intentionally NOT part of the link: the consumer's
+  /// own account supplies name/phone when they scan and confirm, so links
+  /// stay short and carry no third-party personal data. Unknown query
+  /// params on older links are simply ignored.
   static QistLinkPayload? fromUri(Uri uri) {
     if (uri.scheme != 'qistiraha' || uri.host != 'pay') return null;
     final q = uri.queryParameters;
@@ -58,8 +55,6 @@ class QistLinkPayload {
       item: item,
       price: price,
       months: months,
-      buyerName: q['buyerName'],
-      buyerPhone: q['buyerPhone'],
     );
   }
 }

@@ -15,6 +15,7 @@ import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
 import 'package:qistiraha/widgets/income_edit_bottom_sheet.dart';
 import 'add_installment_screen.dart';
+import 'add_installment_desktop.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 const _kBrandDark = Color(0xFF5A75AD);
@@ -195,7 +196,10 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const AddInstallmentScreen(),
+                          builder: (_) => const ResponsiveLayout(
+                            mobileWidget: AddInstallmentScreen(),
+                            desktopWidget: AddInstallmentDesktopScreen(),
+                          ),
                         ),
                       );
                     },
@@ -1149,6 +1153,20 @@ class _InstallmentGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final meta = _statusMeta(installment.statusEnum);
 
+    // The lender/provider (who the money is owed to — e.g. "Valu", a bank)
+    // is the headline; the store + item are secondary context. For
+    // merchant-issued plans provider and merchantName are the same string,
+    // so the merchant name is only appended when it adds new information.
+    final subtitleBase = installment.itemDescription.isNotEmpty
+        ? installment.itemDescription
+        : installment.category;
+    final showMerchantName =
+        installment.merchantName.isNotEmpty &&
+        installment.merchantName != installment.provider;
+    final subtitle = showMerchantName
+        ? '$subtitleBase • ${installment.merchantName}'
+        : subtitleBase;
+
     return DesktopHoverCard(
       onTap: onTap,
       child: Padding(
@@ -1160,13 +1178,25 @@ class _InstallmentGridCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    installment.merchantName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.account_balance_outlined,
+                        size: 14,
+                        color: Colors.grey[500],
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          installment.provider,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Container(
@@ -1191,9 +1221,7 @@ class _InstallmentGridCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              installment.itemDescription.isNotEmpty
-                  ? installment.itemDescription
-                  : installment.category,
+              subtitle,
               style: TextStyle(color: Colors.grey[600], fontSize: 12),
               overflow: TextOverflow.ellipsis,
             ),
@@ -2174,15 +2202,21 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
 
   Installment get _inst => widget.installment;
 
+  /// One node per *payment period*, not per month — a 60-month plan billed
+  /// Quarterly yields 20 nodes, not 60. Node status maps to periods too
+  /// ([paidPayments] of [totalPayments]), and each node's amount is the
+  /// per-period chunk stored in [Installment.monthlyPayment] (or the exact
+  /// recorded amount from [pastPayments], which is likewise one entry per
+  /// period).
   List<_TimelineEntry> _buildTimeline() {
     final entries = <_TimelineEntry>[];
 
-    if (_inst.paidMonths < _inst.totalMonths) {
+    if (_inst.paidPayments < _inst.totalPayments) {
       final pr = PenaltyEngine.calculateLateFees(_inst);
       final upcomingAmount = _inst.monthlyPayment + pr.lateFee;
       entries.add(
         _TimelineEntry(
-          title: 'Payment ${_inst.paidMonths + 1}',
+          title: 'Payment ${_inst.paidPayments + 1}',
           date: _inst.dueDate,
           amount: upcomingAmount,
           status: pr.lateFee > 0 ? 'LATE' : 'UPCOMING',
@@ -2195,14 +2229,11 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
       );
     }
 
-    for (int i = _inst.paidMonths - 1; i >= 0; i--) {
-      double amount = _inst.monthlyPayment;
-      if (i < _inst.pastPayments.length) {
-        amount = _inst.pastPayments[i];
-      }
-      final pastDate = _inst.dueDate.subtract(
-        Duration(days: 30 * (_inst.paidMonths - i)),
-      );
+    for (int i = _inst.paidPayments - 1; i >= 0; i--) {
+      final amount = i < _inst.pastPayments.length
+          ? _inst.pastPayments[i]
+          : _inst.monthlyPayment;
+      final pastDate = _inst.dueDateForPeriodsBack(_inst.paidPayments - i);
       final wasLate = amount > _inst.monthlyPayment;
       entries.add(
         _TimelineEntry(
@@ -2325,7 +2356,10 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
                         Row(
                           children: [
                             Text(
-                              _inst.merchantName,
+                              // Lead with the lender/provider — who the
+                              // debt is owed to — matching the dashboard
+                              // grid card the user clicked to get here.
+                              _inst.provider,
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 20,
@@ -2355,7 +2389,13 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
                         if (_inst.itemDescription.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text(
-                            '${_inst.itemDescription} • ${_inst.category}',
+                            [
+                              _inst.itemDescription,
+                              _inst.category,
+                              if (_inst.merchantName.isNotEmpty &&
+                                  _inst.merchantName != _inst.provider)
+                                _inst.merchantName,
+                            ].join(' • '),
                             style: TextStyle(
                               color: Colors.grey[600],
                               fontSize: 13,
@@ -2720,9 +2760,9 @@ class _DebtBreakdownColumn extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                     ],
-                    const Text(
-                      'MONTHLY PAYMENT',
-                      style: TextStyle(
+                    Text(
+                      installment.paymentFrequencyLabel.toUpperCase(),
+                      style: const TextStyle(
                         color: Colors.black87,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -2747,7 +2787,7 @@ class _DebtBreakdownColumn extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Due ${installment.dueDate.day}th of every month',
+                          'Due ${installment.dueDate.day}th of ${installment.paymentCadencePhrase}',
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 12,

@@ -62,9 +62,7 @@ class _MerchantInstallmentDetailsDesktopState
       final double amount = i < _inst.pastPayments.length
           ? _inst.pastPayments[i]
           : _inst.monthlyPayment;
-      final DateTime approxDate = _inst.dueDate.subtract(
-        Duration(days: 30 * _inst.monthsPerPayment * (paid - i)),
-      );
+      final DateTime approxDate = _inst.dueDateForPeriodsBack(paid - i);
       entries.add(
         _PaymentHistoryEntry(
           title: 'Payment ${i + 1} of ${_inst.totalPayments}',
@@ -304,7 +302,7 @@ class _MerchantInstallmentDetailsDesktopState
                             ),
                             Expanded(
                               child: _StatBlock(
-                                label: 'Monthly Payment',
+                                label: _inst.paymentFrequencyLabel,
                                 value: currency.format(_inst.monthlyPayment),
                               ),
                             ),

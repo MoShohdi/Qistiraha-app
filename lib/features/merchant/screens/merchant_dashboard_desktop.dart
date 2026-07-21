@@ -13,6 +13,7 @@ import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'merchant_customer_profile_screen.dart';
 import 'merchant_installment_details_desktop.dart';
+import 'merchant_portal_desktop.dart';
 import 'merchant_portal_screen.dart';
 
 const _kBrand = Color(0xFF99AFD7);
@@ -236,8 +237,14 @@ class _Sidebar extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) =>
-                              MerchantPortalScreen(business: business),
+                          builder: (_) => ResponsiveLayout(
+                            mobileWidget: MerchantPortalScreen(
+                              business: business,
+                            ),
+                            desktopWidget: MerchantPortalDesktopScreen(
+                              business: business,
+                            ),
+                          ),
                         ),
                       );
                     },

@@ -21,11 +21,10 @@ class QistLinkScreen extends StatelessWidget {
         '(${currency.format(payload.price)} over ${payload.months} months). '
         'Click here to add it to your app: $_link';
 
-    final digits = (payload.buyerPhone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+    // No recipient prefill — the merchant picks the chat; buyer identity
+    // is supplied by the consumer's own account when they open the link.
     final whatsappUri = Uri.parse(
-      digits.isNotEmpty
-          ? 'https://wa.me/$digits?text=${Uri.encodeComponent(message)}'
-          : 'https://wa.me/?text=${Uri.encodeComponent(message)}',
+      'https://wa.me/?text=${Uri.encodeComponent(message)}',
     );
 
     final launched = await launchUrl(

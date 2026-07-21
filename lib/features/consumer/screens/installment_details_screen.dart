@@ -560,9 +560,9 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             ],
             Row(
               children: [
-                const Text(
-                  'MONTHLY PAYMENT',
-                  style: TextStyle(
+                Text(
+                  widget.installment.paymentFrequencyLabel.toUpperCase(),
+                  style: const TextStyle(
                     color: Colors.black87,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -664,7 +664,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                 const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  'Due ${widget.installment.dueDate.day}th of every month',
+                  'Due ${widget.installment.dueDate.day}th of ${widget.installment.paymentCadencePhrase}',
                   style: TextStyle(color: Colors.grey[600], fontSize: 13),
                 ),
               ],
@@ -769,13 +769,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                                 TextSpan(
                                   text: regularPeriodsToPay > 1
                                       ? 'Pay $regularPeriodsToPay Arrears\n'
-                                      : 'Mark ${widget.installment.paymentFrequency == 'Monthly'
-                                            ? 'Month'
-                                            : widget.installment.paymentFrequency == 'Quarterly'
-                                            ? 'Quarter'
-                                            : widget.installment.paymentFrequency == 'Semi-Annually'
-                                            ? 'Half-Year'
-                                            : 'Year'} as Paid\n',
+                                      : 'Mark ${widget.installment.periodNoun} as Paid\n',
                                 ),
                                 TextSpan(
                                   text:
@@ -1104,18 +1098,25 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
 
   Widget _buildPaymentHistory() {
     List<Widget> historyItems = [];
+    final inst = widget.installment;
 
-    // Add upcoming payment
-    if (widget.installment.paidMonths < widget.installment.totalMonths) {
-      double upcomingAmount = widget.installment.monthlyPayment;
-      PenaltyResult pr = PenaltyEngine.calculateLateFees(widget.installment);
+    // One node per payment PERIOD, not per month — a 12-month Semi-Annual
+    // plan shows 2 nodes, not 12. Amounts are the per-period chunk stored in
+    // [monthlyPayment] (or the exact recorded value in [pastPayments], which
+    // is itself one entry per period), and dates step by whole frequency
+    // chunks via [dueDateForPeriodsBack].
+
+    // Add upcoming payment (next unpaid period).
+    if (inst.paidPayments < inst.totalPayments) {
+      double upcomingAmount = inst.monthlyPayment;
+      PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
       double lateFee = pr.lateFee;
       upcomingAmount += lateFee;
 
       historyItems.add(
         _buildHistoryItem(
-          'Payment ${widget.installment.paidMonths + 1}',
-          widget.installment.dueDate,
+          'Payment ${inst.paidPayments + 1}',
+          inst.dueDate,
           upcomingAmount,
           lateFee > 0 ? 'LATE' : 'UPCOMING',
           lateFee > 0 ? Colors.red[50]! : Colors.grey[200]!,
@@ -1123,22 +1124,19 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
           lateFee > 0 ? Icons.warning_amber_rounded : Icons.access_time,
         ),
       );
-      if (widget.installment.paidMonths > 0) {
+      if (inst.paidPayments > 0) {
         historyItems.add(const SizedBox(height: 16));
       }
     }
 
-    // Add past payments from newest to oldest
-    for (int i = widget.installment.paidMonths - 1; i >= 0; i--) {
-      double amount = widget.installment.monthlyPayment;
-      if (i < widget.installment.pastPayments.length) {
-        amount = widget.installment.pastPayments[i];
-      }
+    // Add past periods from newest to oldest.
+    for (int i = inst.paidPayments - 1; i >= 0; i--) {
+      double amount = i < inst.pastPayments.length
+          ? inst.pastPayments[i]
+          : inst.monthlyPayment;
 
-      DateTime pastDate = widget.installment.dueDate.subtract(
-        Duration(days: 30 * (widget.installment.paidMonths - i)),
-      );
-      bool wasLate = amount > widget.installment.monthlyPayment;
+      DateTime pastDate = inst.dueDateForPeriodsBack(inst.paidPayments - i);
+      bool wasLate = amount > inst.monthlyPayment;
 
       historyItems.add(
         _buildHistoryItem(

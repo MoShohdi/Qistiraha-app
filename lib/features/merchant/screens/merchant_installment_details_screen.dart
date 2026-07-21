@@ -35,9 +35,7 @@ class MerchantInstallmentDetailsScreen extends StatelessWidget {
       final double amount = i < installment.pastPayments.length
           ? installment.pastPayments[i]
           : installment.monthlyPayment;
-      final DateTime approxDate = installment.dueDate.subtract(
-        Duration(days: 30 * installment.monthsPerPayment * (paid - i)),
-      );
+      final DateTime approxDate = installment.dueDateForPeriodsBack(paid - i);
       entries.add(
         _PaymentHistoryEntry(
           title: 'Payment ${i + 1} of ${installment.totalPayments}',
@@ -271,7 +269,7 @@ class MerchantInstallmentDetailsScreen extends StatelessWidget {
                               ),
                               Expanded(
                                 child: _StatBlock(
-                                  label: 'Monthly Payment',
+                                  label: installment.paymentFrequencyLabel,
                                   value: currency.format(
                                     installment.monthlyPayment,
                                   ),
