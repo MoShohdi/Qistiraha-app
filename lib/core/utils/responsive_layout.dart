@@ -122,11 +122,13 @@ class EmbeddedScreen extends StatelessWidget {
 class DesktopEmptyDetail extends StatelessWidget {
   final IconData icon;
   final String message;
+  final double iconSize;
 
   const DesktopEmptyDetail({
     super.key,
     this.icon = Icons.touch_app_outlined,
     this.message = 'Select a record to view details',
+    this.iconSize = 56,
   });
 
   @override
@@ -135,7 +137,7 @@ class DesktopEmptyDetail extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 56, color: Colors.grey[300]),
+          Icon(icon, size: iconSize, color: Colors.grey[300]),
           const SizedBox(height: 16),
           Text(
             message,

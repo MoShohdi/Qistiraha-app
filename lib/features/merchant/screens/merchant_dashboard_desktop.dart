@@ -12,7 +12,7 @@ import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
 import 'merchant_customer_profile_screen.dart';
-import 'merchant_installment_details_screen.dart';
+import 'merchant_installment_details_desktop.dart';
 import 'merchant_portal_screen.dart';
 
 const _kBrand = Color(0xFF99AFD7);
@@ -128,6 +128,7 @@ class _MerchantDashboardDesktopState extends State<MerchantDashboardDesktop> {
           currency: _currency,
           selected: _selectedInstallment,
           onSelect: (inst) => setState(() => _selectedInstallment = inst),
+          onCancelled: () => setState(() => _selectedInstallment = null),
         );
       case _MerchantNav.insights:
         return _InsightsGrid(plans: plans, currency: _currency);
@@ -426,29 +427,29 @@ class _OverviewGridState extends State<_OverviewGrid> {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: [
-                  SizedBox(
-                    width: 280,
-                    child: _DesktopStatCard(
-                      label: 'Total Expected Revenue',
-                      value: widget.currency.format(_totalExpected),
-                      icon: Icons.trending_up,
-                      color: _kBrand,
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _DesktopStatCard(
+                        label: 'Total Expected Revenue',
+                        value: widget.currency.format(_totalExpected),
+                        icon: Icons.trending_up,
+                        color: _kBrand,
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: 280,
-                    child: _DesktopStatCard(
-                      label: 'Total Received',
-                      value: widget.currency.format(_totalReceived),
-                      icon: Icons.account_balance_wallet_outlined,
-                      color: Colors.green,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _DesktopStatCard(
+                        label: 'Total Received',
+                        value: widget.currency.format(_totalReceived),
+                        icon: Icons.account_balance_wallet_outlined,
+                        color: Colors.green,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 36),
               const Text(
@@ -714,111 +715,122 @@ class _CustomersMasterDetailState extends State<_CustomersMasterDetail> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
               flex: 2,
-              child: customers.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No customers yet.',
-                        style: TextStyle(color: Colors.grey[500]),
-                      ),
-                    )
-                  : Scrollbar(
-                      controller: _listController,
-                      thumbVisibility: true,
-                      child: ListView.builder(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: customers.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No customers yet.',
+                          style: TextStyle(color: Colors.grey[500]),
+                        ),
+                      )
+                    : Scrollbar(
                         controller: _listController,
-                        padding: const EdgeInsets.only(right: 12, bottom: 12),
-                        itemCount: customers.length,
-                        itemBuilder: (context, index) {
-                          final c = customers[index];
-                          String healthLabel;
-                          Color healthColor;
-                          if (c.hasOverdue) {
-                            healthLabel = 'Has Overdue Payment';
-                            healthColor = Colors.red;
-                          } else if (c.allPaid) {
-                            healthLabel = 'Fully Paid';
-                            healthColor = Colors.green;
-                          } else {
-                            healthLabel = 'Good Standing';
-                            healthColor = _kBrand;
-                          }
+                        thumbVisibility: true,
+                        child: ListView.builder(
+                          controller: _listController,
+                          padding: const EdgeInsets.only(right: 12, bottom: 12),
+                          itemCount: customers.length,
+                          itemBuilder: (context, index) {
+                            final c = customers[index];
+                            String healthLabel;
+                            Color healthColor;
+                            if (c.hasOverdue) {
+                              healthLabel = 'Has Overdue Payment';
+                              healthColor = Colors.red;
+                            } else if (c.allPaid) {
+                              healthLabel = 'Fully Paid';
+                              healthColor = Colors.green;
+                            } else {
+                              healthLabel = 'Good Standing';
+                              healthColor = _kBrand;
+                            }
 
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: DesktopHoverCard(
-                              selected: c.key == widget.selectedKey,
-                              onTap: () => widget.onSelect(c.key),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      backgroundColor: healthColor.withValues(
-                                        alpha: 0.15,
-                                      ),
-                                      child: Icon(
-                                        Icons.person,
-                                        color: healthColor,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            c.name,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '${c.plans.length} plan${c.plans.length == 1 ? '' : 's'} • Outstanding ${widget.currency.format(c.outstanding)}',
-                                            style: TextStyle(
-                                              color: Colors.grey[600],
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: healthColor.withValues(
-                                          alpha: 0.12,
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: DesktopHoverCard(
+                                selected: c.key == widget.selectedKey,
+                                onTap: () => widget.onSelect(c.key),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: healthColor.withValues(
+                                          alpha: 0.15,
                                         ),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        healthLabel,
-                                        style: TextStyle(
+                                        child: Icon(
+                                          Icons.person,
                                           color: healthColor,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              c.name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${c.plans.length} plan${c.plans.length == 1 ? '' : 's'} • Outstanding ${widget.currency.format(c.outstanding)}',
+                                              style: TextStyle(
+                                                color: Colors.grey[600],
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: healthColor.withValues(
+                                            alpha: 0.12,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          healthLabel,
+                                          style: TextStyle(
+                                            color: healthColor,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
+              ),
             ),
-            const SizedBox(width: 24),
+            const SizedBox(width: 16),
+            VerticalDivider(width: 1, color: Colors.grey[300]),
+            const SizedBox(width: 16),
             Expanded(
               flex: 3,
               child: Container(
@@ -860,12 +872,14 @@ class _ActiveMasterDetail extends StatefulWidget {
   final NumberFormat currency;
   final Installment? selected;
   final ValueChanged<Installment> onSelect;
+  final VoidCallback onCancelled;
 
   const _ActiveMasterDetail({
     required this.plans,
     required this.currency,
     required this.selected,
     required this.onSelect,
+    required this.onCancelled,
   });
 
   @override
@@ -901,60 +915,69 @@ class _ActiveMasterDetailState extends State<_ActiveMasterDetail> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
               flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      _filterChip('All', _ActiveFilter.all),
-                      _filterChip('Overdue', _ActiveFilter.overdue),
-                      _filterChip('Pending', _ActiveFilter.pending),
-                      _filterChip('Paid', _ActiveFilter.paid),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? Center(
-                            child: Text(
-                              'No installments match this filter.',
-                              style: TextStyle(color: Colors.grey[500]),
-                            ),
-                          )
-                        : Scrollbar(
-                            controller: _listController,
-                            thumbVisibility: true,
-                            child: ListView.builder(
-                              controller: _listController,
-                              padding: const EdgeInsets.only(
-                                right: 12,
-                                bottom: 12,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        _filterChip('All', _ActiveFilter.all),
+                        _filterChip('Overdue', _ActiveFilter.overdue),
+                        _filterChip('Pending', _ActiveFilter.pending),
+                        _filterChip('Paid', _ActiveFilter.paid),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No installments match this filter.',
+                                style: TextStyle(color: Colors.grey[500]),
                               ),
-                              itemCount: filtered.length,
-                              itemBuilder: (context, index) {
-                                final p = filtered[index];
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: _ActiveDesktopCard(
-                                    installment: p,
-                                    currency: widget.currency,
-                                    selected: widget.selected?.id == p.id,
-                                    onTap: () => widget.onSelect(p),
-                                  ),
-                                );
-                              },
+                            )
+                          : Scrollbar(
+                              controller: _listController,
+                              thumbVisibility: true,
+                              child: ListView.builder(
+                                controller: _listController,
+                                padding: const EdgeInsets.only(
+                                  right: 12,
+                                  bottom: 12,
+                                ),
+                                itemCount: filtered.length,
+                                itemBuilder: (context, index) {
+                                  final p = filtered[index];
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: _ActiveDesktopCard(
+                                      installment: p,
+                                      currency: widget.currency,
+                                      selected: widget.selected?.id == p.id,
+                                      onTap: () => widget.onSelect(p),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(width: 24),
+            const SizedBox(width: 16),
+            VerticalDivider(width: 1, color: Colors.grey[300]),
+            const SizedBox(width: 16),
             Expanded(
               flex: 3,
               child: Container(
@@ -966,13 +989,14 @@ class _ActiveMasterDetailState extends State<_ActiveMasterDetail> {
                 clipBehavior: Clip.antiAlias,
                 child: widget.selected == null
                     ? const DesktopEmptyDetail(
-                        message: 'Select a contract to view details',
+                        icon: Icons.receipt_long,
+                        iconSize: 80,
+                        message: 'Select an installment to view details',
                       )
-                    : EmbeddedScreen(
+                    : MerchantInstallmentDetailsDesktop(
                         key: ValueKey('installment-${widget.selected!.id}'),
-                        child: MerchantInstallmentDetailsScreen(
-                          installment: widget.selected!,
-                        ),
+                        installment: widget.selected!,
+                        onCancelled: widget.onCancelled,
                       ),
               ),
             ),
@@ -1294,37 +1318,37 @@ class _InsightsGridState extends State<_InsightsGrid> {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: [
-                  SizedBox(
-                    width: 260,
-                    child: _DesktopStatCard(
-                      label: 'Total Expected Revenue',
-                      value: widget.currency.format(_totalExpected),
-                      icon: Icons.account_balance_wallet_outlined,
-                      color: _kBrand,
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _DesktopStatCard(
+                        label: 'Total Expected Revenue',
+                        value: widget.currency.format(_totalExpected),
+                        icon: Icons.account_balance_wallet_outlined,
+                        color: _kBrand,
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: 260,
-                    child: _DesktopStatCard(
-                      label: 'Revenue Collected',
-                      value: widget.currency.format(_totalCollected),
-                      icon: Icons.savings_outlined,
-                      color: Colors.green,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _DesktopStatCard(
+                        label: 'Revenue Collected',
+                        value: widget.currency.format(_totalCollected),
+                        icon: Icons.savings_outlined,
+                        color: Colors.green,
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: 320,
-                    child: _StoreHealthDesktopCard(
-                      onTimePct: _onTimePct,
-                      onTimeCount: _onTimeCount,
-                      overdueCount: _overdueCount,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _StoreHealthDesktopCard(
+                        onTimePct: _onTimePct,
+                        onTimeCount: _onTimeCount,
+                        overdueCount: _overdueCount,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
               BrandedBarChartCard(
