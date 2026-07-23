@@ -23,13 +23,15 @@ class UserAccountAdapter extends TypeAdapter<UserAccount> {
       salaryDay: fields[3] == null ? 1 : fields[3] as int,
       role: fields[4] == null ? 'consumer' : fields[4] as String,
       businessId: fields[5] as String?,
+      authUserId: fields[6] as String?,
+      email: fields[7] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserAccount obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -41,7 +43,11 @@ class UserAccountAdapter extends TypeAdapter<UserAccount> {
       ..writeByte(4)
       ..write(obj.role)
       ..writeByte(5)
-      ..write(obj.businessId);
+      ..write(obj.businessId)
+      ..writeByte(6)
+      ..write(obj.authUserId)
+      ..writeByte(7)
+      ..write(obj.email);
   }
 
   @override

@@ -33,6 +33,15 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="qistiraha" android:host="pay"/>
             </intent-filter>
+            <!-- Supabase OAuth (Google Sign-In) redirect:
+                 qistiraha://login-callback — a separate filter from the
+                 Qist-Link one above so the two never share matching rules. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="qistiraha" android:host="login-callback"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

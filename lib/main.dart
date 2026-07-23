@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/services/hive_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/utils/responsive_layout.dart';
@@ -9,40 +11,122 @@ import 'features/consumer/screens/profile_screen.dart';
 import 'features/consumer/screens/consumer_dashboard_desktop.dart';
 
 import 'features/auth/services/auth_service.dart';
-import 'features/auth/models/user_role.dart';
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/login_screen_desktop.dart';
+import 'features/auth/screens/role_picker_screen.dart';
+import 'features/auth/screens/role_picker_desktop.dart';
 import 'features/merchant/screens/merchant_dashboard_screen.dart';
 import 'features/merchant/screens/merchant_dashboard_desktop.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+const supabaseUrl = 'https://blenajafusdwqrlpajnd.supabase.co';
+const supabasePublishableKey = 'sb_publishable_Sxh427NXnNPdKw7sLCBXJg_SGkg1ks5';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: supabaseUrl,
+    publishableKey: supabasePublishableKey,
+  );
   await HiveService.init();
-  bool loggedIn = await AuthService.isLoggedIn();
-  UserRole role = await AuthService.getRole();
-  runApp(QistirahaApp(isLoggedIn: loggedIn, role: role));
+  // Role now comes from Supabase (public.profiles), so boot needs the
+  // network. A transient failure must not crash before the first frame —
+  // fall back to the logged-out screen; the persisted session is untouched,
+  // so the next sign-in attempt (or a reload) resolves cleanly.
+  AuthDestination destination;
+  try {
+    destination = await AuthService.resolveDestination();
+  } catch (_) {
+    destination = AuthDestination.loggedOut;
+  }
+  runApp(QistirahaApp(initialDestination: destination));
+}
+
+/// The single place that turns an [AuthDestination] into the screen pair
+/// shown for it — reused at boot, by the root auth-state listener, and by
+/// the Role Picker screens once a role is chosen.
+Widget destinationScreen(AuthDestination destination) {
+  switch (destination) {
+    case AuthDestination.loggedOut:
+      return const ResponsiveLayout(
+        mobileWidget: WelcomeScreen(),
+        desktopWidget: LoginScreenDesktop(),
+      );
+    case AuthDestination.rolePicker:
+      return const ResponsiveLayout(
+        mobileWidget: RolePickerScreen(),
+        desktopWidget: RolePickerDesktopScreen(),
+      );
+    case AuthDestination.merchantHome:
+      return const ResponsiveLayout(
+        mobileWidget: MerchantDashboardScreen(),
+        desktopWidget: MerchantDashboardDesktop(),
+      );
+    case AuthDestination.consumerHome:
+      return const ResponsiveLayout(
+        mobileWidget: MainNavigation(),
+        desktopWidget: ConsumerDashboardDesktop(),
+      );
+  }
 }
 
 class QistirahaApp extends StatefulWidget {
-  final bool isLoggedIn;
-  final UserRole role;
-  const QistirahaApp({super.key, required this.isLoggedIn, required this.role});
+  final AuthDestination initialDestination;
+  const QistirahaApp({super.key, required this.initialDestination});
 
   @override
   State<QistirahaApp> createState() => _QistirahaAppState();
 }
 
 class _QistirahaAppState extends State<QistirahaApp> {
+  StreamSubscription<AuthState>? _authSub;
+
   @override
   void initState() {
     super.initState();
     DeepLinkService.init(navigatorKey);
+    _authSub = AuthService.authStateChanges.listen(_onAuthStateChange);
+  }
+
+  /// `onAuthStateChange` immediately replays the current session as its
+  /// first event (`initialSession`) — `main()` already decided the first
+  /// screen from that same session, so this only needs to react to events
+  /// that happen *after* boot: a live Google/email sign-in completing, or
+  /// a sign-out, while the app is already running.
+  Future<void> _onAuthStateChange(AuthState state) async {
+    switch (state.event) {
+      case AuthChangeEvent.signedIn:
+        AuthDestination destination;
+        try {
+          destination = await AuthService.resolveDestination();
+        } catch (_) {
+          // Couldn't reach profiles right after sign-in — send the user to
+          // the role picker, which retries the write and routes onward,
+          // rather than stranding them on the login screen.
+          destination = AuthDestination.rolePicker;
+        }
+        navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => destinationScreen(destination)),
+          (route) => false,
+        );
+        break;
+      case AuthChangeEvent.signedOut:
+        navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => destinationScreen(AuthDestination.loggedOut),
+          ),
+          (route) => false,
+        );
+        break;
+      default:
+        break; // initialSession, tokenRefreshed, userUpdated, etc. — no-op
+    }
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     DeepLinkService.dispose();
     super.dispose();
   }
@@ -70,20 +154,7 @@ class _QistirahaAppState extends State<QistirahaApp> {
           selectedItemColor: Color(0xFF99AFD7),
         ),
       ),
-      home: !widget.isLoggedIn
-          ? const ResponsiveLayout(
-              mobileWidget: WelcomeScreen(),
-              desktopWidget: LoginScreenDesktop(),
-            )
-          : (widget.role == UserRole.merchant
-                ? const ResponsiveLayout(
-                    mobileWidget: MerchantDashboardScreen(),
-                    desktopWidget: MerchantDashboardDesktop(),
-                  )
-                : const ResponsiveLayout(
-                    mobileWidget: MainNavigation(),
-                    desktopWidget: ConsumerDashboardDesktop(),
-                  )),
+      home: destinationScreen(widget.initialDestination),
     );
   }
 }

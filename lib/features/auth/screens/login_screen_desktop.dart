@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qistiraha/core/utils/responsive_layout.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
-import 'package:qistiraha/features/consumer/screens/consumer_dashboard_desktop.dart';
-import 'package:qistiraha/features/merchant/screens/merchant_dashboard_desktop.dart';
-import '../models/user_role.dart';
-import '../widgets/role_toggle.dart';
+import '../widgets/google_sign_in_button.dart';
 import 'signup_screen.dart';
 
 const _kBrandDark = Color(0xFF5A75AD);
@@ -13,9 +10,13 @@ const _kBg = Color(0xFFF8F9FA);
 /// Desktop/web split-screen login — replaces the mobile Welcome→Login
 /// two-step flow with a single modern page: a branded panel on the left,
 /// the sign-in form in a clean white card on the right. Reached directly
-/// from boot via `ResponsiveLayout` when not logged in, so a successful
-/// sign-in goes straight to the desktop dashboards (no need to re-check
-/// screen width — we're already on desktop by construction).
+/// from boot via `ResponsiveLayout` when not logged in.
+///
+/// Both email and Google sign-in leave their button spinning on success
+/// and rely on the root `onAuthStateChange` listener (`main.dart`) to
+/// navigate — email resolves in-place almost immediately, Google navigates
+/// the tab away entirely, so a single shared navigation path avoids two
+/// screens racing to decide where to go.
 class LoginScreenDesktop extends StatefulWidget {
   const LoginScreenDesktop({super.key});
 
@@ -26,9 +27,11 @@ class LoginScreenDesktop extends StatefulWidget {
 class _LoginScreenDesktopState extends State<LoginScreenDesktop> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
+  bool _isEmailLoading = false;
+  bool _isGoogleLoading = false;
   bool _obscureText = true;
-  UserRole _selectedRole = UserRole.consumer;
+
+  bool get _busy => _isEmailLoading || _isGoogleLoading;
 
   @override
   void dispose() {
@@ -38,30 +41,36 @@ class _LoginScreenDesktopState extends State<LoginScreenDesktop> {
   }
 
   Future<void> _handleLogin() async {
-    setState(() => _isLoading = true);
+    setState(() => _isEmailLoading = true);
 
-    final success = await AuthService.signInWithEmail(
+    final error = await AuthService.signInWithEmail(
       _emailController.text,
       _passwordController.text,
-      role: _selectedRole,
     );
 
-    setState(() => _isLoading = false);
+    if (!mounted) return;
+    if (error != null) {
+      setState(() => _isEmailLoading = false);
+      showDesktopSnackBar(context, message: error);
+    }
+    // On success we deliberately leave the spinner running — the root
+    // auth-state listener takes over navigation within a beat.
+  }
 
-    if (success && mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (_) => _selectedRole == UserRole.merchant
-              ? const MerchantDashboardDesktop()
-              : const ConsumerDashboardDesktop(),
-        ),
-        (route) => false,
-      );
-    } else if (mounted) {
+  Future<void> _handleGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    bool launched = false;
+    try {
+      launched = await AuthService.signInWithGoogle();
+    } catch (_) {
+      launched = false;
+    }
+    if (!mounted) return;
+    setState(() => _isGoogleLoading = false);
+    if (!launched) {
       showDesktopSnackBar(
         context,
-        message: 'Login failed. Please check your credentials.',
+        message: 'Could not start Google sign-in. Please try again.',
       );
     }
   }
@@ -104,11 +113,6 @@ class _LoginScreenDesktopState extends State<LoginScreenDesktop> {
           style: TextStyle(fontSize: 15, color: Colors.grey),
         ),
         const SizedBox(height: 32),
-        RoleToggle(
-          selected: _selectedRole,
-          onChanged: (role) => setState(() => _selectedRole = role),
-        ),
-        const SizedBox(height: 24),
         const Text(
           'Email or Phone Number',
           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
@@ -116,6 +120,7 @@ class _LoginScreenDesktopState extends State<LoginScreenDesktop> {
         const SizedBox(height: 8),
         TextFormField(
           controller: _emailController,
+          enabled: !_busy,
           decoration: InputDecoration(
             hintText: 'name@example.com',
             prefixIcon: const Icon(Icons.person_outline),
@@ -145,6 +150,7 @@ class _LoginScreenDesktopState extends State<LoginScreenDesktop> {
         TextFormField(
           controller: _passwordController,
           obscureText: _obscureText,
+          enabled: !_busy,
           decoration: InputDecoration(
             hintText: '••••••••',
             prefixIcon: const Icon(Icons.lock_outline),
@@ -168,7 +174,7 @@ class _LoginScreenDesktopState extends State<LoginScreenDesktop> {
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
             child: ElevatedButton(
-              onPressed: _isLoading ? null : _handleLogin,
+              onPressed: _busy ? null : _handleLogin,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black,
                 foregroundColor: Colors.white,
@@ -176,7 +182,7 @@ class _LoginScreenDesktopState extends State<LoginScreenDesktop> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: _isLoading
+              child: _isEmailLoading
                   ? const SizedBox(
                       height: 20,
                       width: 20,
@@ -191,6 +197,13 @@ class _LoginScreenDesktopState extends State<LoginScreenDesktop> {
                     ),
             ),
           ),
+        ),
+        const SizedBox(height: 24),
+        const AuthDivider(),
+        const SizedBox(height: 24),
+        GoogleSignInButton(
+          onPressed: _busy ? null : _handleGoogle,
+          isLoading: _isGoogleLoading,
         ),
         const SizedBox(height: 24),
         Row(

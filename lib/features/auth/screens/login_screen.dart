@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
-import '../models/user_role.dart';
-import '../widgets/role_toggle.dart';
-import '../../merchant/screens/merchant_dashboard_screen.dart';
-import '../../../main.dart'; // To access MainNavigation
+import '../widgets/google_sign_in_button.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,39 +12,59 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
+  bool _isEmailLoading = false;
+  bool _isGoogleLoading = false;
   bool _obscureText = true;
-  UserRole _selectedRole = UserRole.consumer;
+
+  bool get _busy => _isEmailLoading || _isGoogleLoading;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   Future<void> _handleLogin() async {
-    setState(() => _isLoading = true);
+    setState(() => _isEmailLoading = true);
 
-    // Attempt login (this will automatically bypass in kDebugMode)
-    bool success = await AuthService.signInWithEmail(
+    final error = await AuthService.signInWithEmail(
       _emailController.text,
       _passwordController.text,
-      role: _selectedRole,
     );
 
-    setState(() => _isLoading = false);
-
-    if (success && mounted) {
-      Navigator.pushAndRemoveUntil(
+    if (!mounted) return;
+    if (error != null) {
+      setState(() => _isEmailLoading = false);
+      ScaffoldMessenger.of(
         context,
-        MaterialPageRoute(
-          builder: (_) => _selectedRole == UserRole.merchant
-              ? const MerchantDashboardScreen()
-              : const MainNavigation(),
-        ),
-        (route) => false, // Remove all previous routes
-      );
-    } else if (mounted) {
+      ).showSnackBar(SnackBar(content: Text(error)));
+    }
+    // On success we deliberately leave _isEmailLoading true — the root
+    // auth-state listener (main.dart) takes over navigation within a beat,
+    // and re-enabling the form here would just flash before it does.
+  }
+
+  Future<void> _handleGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    bool launched = false;
+    try {
+      launched = await AuthService.signInWithGoogle();
+    } catch (_) {
+      launched = false;
+    }
+    if (!mounted) return;
+    setState(() => _isGoogleLoading = false);
+    if (!launched) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Login failed. Please check your credentials.'),
+          content: Text('Could not start Google sign-in. Please try again.'),
         ),
       );
     }
+    // If launched: web is navigating away right now; mobile has handed
+    // control to the system browser. Either way, completion (or the user
+    // cancelling and returning here) is reported via the root listener.
   }
 
   @override
@@ -98,11 +115,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 32),
-              RoleToggle(
-                selected: _selectedRole,
-                onChanged: (role) => setState(() => _selectedRole = role),
-              ),
-              const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -129,6 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _emailController,
+                      enabled: !_busy,
                       decoration: InputDecoration(
                         hintText: 'name@example.com',
                         prefixIcon: const Icon(Icons.person_outline),
@@ -161,6 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscureText,
+                      enabled: !_busy,
                       decoration: InputDecoration(
                         hintText: '••••••••',
                         prefixIcon: const Icon(Icons.lock_outline),
@@ -183,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _isLoading ? null : _handleLogin,
+                        onPressed: _busy ? null : _handleLogin,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.black,
                           foregroundColor: Colors.white,
@@ -191,7 +205,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: _isLoading
+                        child: _isEmailLoading
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
@@ -208,6 +222,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                       ),
+                    ),
+                    const SizedBox(height: 20),
+                    const AuthDivider(),
+                    const SizedBox(height: 20),
+                    GoogleSignInButton(
+                      onPressed: _busy ? null : _handleGoogle,
+                      isLoading: _isGoogleLoading,
                     ),
                   ],
                 ),

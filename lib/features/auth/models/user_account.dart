@@ -25,6 +25,15 @@ class UserAccount extends HiveObject {
   @HiveField(5)
   String? businessId;
 
+  /// Supabase `auth.users.id` — links this local record to the
+  /// authenticated identity that owns it. Null for any local data seeded
+  /// before real auth existed.
+  @HiveField(6)
+  String? authUserId;
+
+  @HiveField(7)
+  String? email;
+
   UserAccount({
     required this.name,
     required this.monthlyIncome,
@@ -32,5 +41,7 @@ class UserAccount extends HiveObject {
     this.salaryDay = 1,
     this.role = 'consumer',
     this.businessId,
+    this.authUserId,
+    this.email,
   });
 }
