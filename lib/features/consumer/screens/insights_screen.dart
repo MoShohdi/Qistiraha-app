@@ -7,7 +7,6 @@ import 'package:qistiraha/features/auth/models/user_account.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/core/services/time_service.dart';
 import 'package:qistiraha/core/engine/affordability_engine.dart';
-import 'package:qistiraha/core/engine/penalty_engine.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import '../../../widgets/income_edit_bottom_sheet.dart';
 import '../../../widgets/branded_bar_chart_card.dart';
@@ -167,59 +166,35 @@ class _InsightsScreenState extends State<InsightsScreen> {
           List<double> buckets = List.filled(numBuckets, 0.0);
 
           for (var inst in installments) {
-            if (inst.statusEnum != InstallmentStatus.paid) {
-              PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
+            if (inst.statusEnum == InstallmentStatus.paid) continue;
 
-              if (pr.isAccelerated) {
-                int remaining = inst.totalPayments - inst.paidPayments;
-                double amount = (remaining * inst.monthlyPayment) + pr.lateFee;
-                if (amount > 0) {
-                  buckets[0] += amount;
-                }
-              } else {
-                int missed = PenaltyEngine.calculateUncappedMissedPeriods(inst);
-                if (missed > 0) {
-                  double amount = (missed * inst.monthlyPayment) + pr.lateFee;
-                  buckets[0] += amount;
-                }
+            // No penalties/acceleration: simply project each remaining
+            // payment forward from its due date by the plan's frequency step.
+            int paymentsAdded = 0;
+            int remainingPayments = inst.totalPayments - inst.paidPayments;
+            DateTime projectedDate = inst.dueDate;
 
-                int paymentsAdded = 0;
-                int remainingPayments = inst.totalPayments - inst.paidPayments;
-                DateTime projectedDate = inst.dueDate;
+            while (paymentsAdded < remainingPayments) {
+              int monthsDiff =
+                  ((projectedDate.year - now.year) * 12) +
+                  projectedDate.month -
+                  now.month;
 
-                // If we missed payments, the next future payment is shifted forward
-                if (missed > 0) {
-                  int monthsToAdvance = missed * inst.monthsPerPayment;
-                  projectedDate = DateTime(
-                    projectedDate.year,
-                    projectedDate.month + monthsToAdvance,
-                    projectedDate.day,
-                  );
-                }
-
-                while (paymentsAdded < remainingPayments) {
-                  int monthsDiff =
-                      ((projectedDate.year - now.year) * 12) +
-                      projectedDate.month -
-                      now.month;
-
-                  int bucketIndex = monthsDiff ~/ stepSize;
-                  if (bucketIndex >= numBuckets) {
-                    break; // Past our dynamic window
-                  }
-
-                  if (bucketIndex >= 0) {
-                    buckets[bucketIndex] += inst.monthlyPayment;
-                  }
-
-                  projectedDate = DateTime(
-                    projectedDate.year,
-                    projectedDate.month + inst.monthsPerPayment,
-                    projectedDate.day,
-                  );
-                  paymentsAdded++;
-                }
+              int bucketIndex = monthsDiff ~/ stepSize;
+              if (bucketIndex >= numBuckets) {
+                break; // Past our dynamic window
               }
+
+              if (bucketIndex >= 0) {
+                buckets[bucketIndex] += inst.monthlyPayment;
+              }
+
+              projectedDate = DateTime(
+                projectedDate.year,
+                projectedDate.month + inst.monthsPerPayment,
+                projectedDate.day,
+              );
+              paymentsAdded++;
             }
           }
 

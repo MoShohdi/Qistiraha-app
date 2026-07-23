@@ -5,7 +5,6 @@ import 'package:qistiraha/core/services/hive_service.dart';
 import 'package:qistiraha/features/auth/models/user_account.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/core/services/time_service.dart';
-import 'package:qistiraha/core/engine/penalty_engine.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/core/engine/affordability_engine.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
@@ -473,7 +472,6 @@ class _HomeScreenState extends State<HomeScreen> {
     activeInstallments.sort((a, b) => a.dueDate.compareTo(b.dueDate));
     Installment nextInst = activeInstallments.first;
 
-    PenaltyResult pr = PenaltyEngine.calculateLateFees(nextInst);
     final currencyFormatter = NumberFormat.currency(
       symbol: 'EGP ',
       decimalDigits: 0,
@@ -490,20 +488,8 @@ class _HomeScreenState extends State<HomeScreen> {
     int daysLate = justDate.difference(dueDateJustDate).inDays;
     int daysUntilDue = dueDateJustDate.difference(justDate).inDays;
 
-    double displayAmountDue;
-    if (pr.isAccelerated) {
-      displayAmountDue =
-          ((nextInst.totalMonths - nextInst.paidMonths) *
-              nextInst.monthlyPayment) +
-          pr.lateFee;
-    } else if (pr.lateFee > 0 || daysLate > 0) {
-      displayAmountDue =
-          (nextInst.monthlyPayment *
-              PenaltyEngine.calculateMissedMonths(nextInst)) +
-          pr.lateFee;
-    } else {
-      displayAmountDue = nextInst.monthlyPayment;
-    }
+    // No penalties: the amount due is always just the next period's payment.
+    double displayAmountDue = nextInst.monthlyPayment;
 
     String amountStr = currencyFormatter.format(displayAmountDue);
     String itemDetails = "${nextInst.provider} (${nextInst.itemDescription})";
@@ -513,15 +499,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Color textColor = Colors.transparent;
     IconData iconData = Icons.warning;
 
-    if (pr.isAccelerated) {
-      warningText =
-          '🚨 DEFAULT: Entire balance of $amountStr is due for $itemDetails!';
-      bgColor = const Color(0xFFFFF0F0);
-      textColor = Colors.red[800]!;
-      iconData = Icons.error_outline;
-    } else if (daysLate > 0) {
-      warningText =
-          '🚨 Payment is late. Please contact your lender for late fees details.';
+    if (daysLate > 0) {
+      warningText = '🚨 Payment is overdue for $itemDetails. Pay $amountStr';
       bgColor = const Color(0xFFFFF0F0);
       textColor = Colors.red[800]!;
       iconData = Icons.warning_amber_rounded;
@@ -1004,12 +983,8 @@ class _HomeScreenState extends State<HomeScreen> {
             b.merchantName.toLowerCase(),
           );
         case 'total debt':
-          double debtA =
-              ((a.totalMonths - a.paidMonths) * a.monthlyPayment) +
-              PenaltyEngine.calculateLateFees(a).lateFee;
-          double debtB =
-              ((b.totalMonths - b.paidMonths) * b.monthlyPayment) +
-              PenaltyEngine.calculateLateFees(b).lateFee;
+          double debtA = (a.totalMonths - a.paidMonths) * a.monthlyPayment;
+          double debtB = (b.totalMonths - b.paidMonths) * b.monthlyPayment;
           return debtB.compareTo(debtA);
         case 'installment debt':
           return b.monthlyPayment.compareTo(a.monthlyPayment);
@@ -1045,58 +1020,10 @@ class _HomeScreenState extends State<HomeScreen> {
         bool isOverdue =
             inst.statusEnum != InstallmentStatus.paid && daysToDue < 0;
 
-        PenaltyResult penaltyResult = PenaltyEngine.calculateLateFees(inst);
-        bool isAccelerated = penaltyResult.isAccelerated;
-        int remainingPeriods = inst.totalPayments - inst.paidPayments;
-
-        double displayAmountDue;
-
-        // --- Header: total accumulated debt (what the user owes in full) ---
-        int periodsOwed;
-        if (!isOverdue) {
-          periodsOwed = 1; // upcoming or on-time: show current active period
-        } else {
-          periodsOwed = PenaltyEngine.calculateUncappedMissedPeriods(inst);
-          if (periodsOwed > remainingPeriods) {
-            periodsOwed = remainingPeriods; // cap at remaining
-          }
-        }
-
-        if (isAccelerated) {
-          displayAmountDue = (remainingPeriods * inst.monthlyPayment);
-        } else {
-          displayAmountDue = (inst.monthlyPayment * periodsOwed);
-        }
-
-        // --- Button: immediate transaction cost (1 period for informal, arrears for commercial) ---
-        int regularPeriodsToPay = PenaltyEngine.calculateActualPeriodsToPay(
-          inst,
-        );
-        if (inst.paidPayments + regularPeriodsToPay > inst.totalPayments) {
-          regularPeriodsToPay = inst.totalPayments - inst.paidPayments;
-        }
-        double regularTransactionCost =
-            (inst.monthlyPayment * regularPeriodsToPay);
-
-        int fullPeriodsToPay = inst.totalPayments - inst.paidPayments;
-        double fullTransactionCost = (inst.monthlyPayment * fullPeriodsToPay);
-
-        int visualRedSegments = 0;
-        if (isOverdue) {
-          visualRedSegments = PenaltyEngine.calculateUncappedMissedPeriods(
-            inst,
-          );
-        }
-        visualRedSegments = visualRedSegments > remainingPeriods
-            ? remainingPeriods
-            : visualRedSegments;
-
-        String dueText;
-        if (isAccelerated) {
-          dueText = '⚠️ DEFAULT STATUS: ENTIRE BALANCE DUE';
-        } else {
-          dueText = TimeService.formatDueDate(daysToDue);
-        }
+        // No penalties/acceleration: the amount shown is a single period's
+        // payment, and the button marks exactly one period paid.
+        double displayAmountDue = inst.monthlyPayment;
+        String dueText = TimeService.formatDueDate(daysToDue);
 
         return CardPopIn(
           id: inst.id,
@@ -1281,19 +1208,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ) {
                               int paidSegments = inst.paidPayments;
                               int totalSegments = inst.totalPayments;
-                              int redSegments = 0;
 
-                              if (isAccelerated) {
-                                redSegments = totalSegments - paidSegments;
-                              } else {
-                                redSegments = visualRedSegments;
-                              }
-
+                              // No penalties: paid vs. remaining only.
                               Color segmentColor;
                               if (index < paidSegments) {
                                 segmentColor = Theme.of(context).primaryColor;
-                              } else if (index < paidSegments + redSegments) {
-                                segmentColor = Colors.red;
                               } else {
                                 segmentColor = Colors.grey[200]!;
                               }
@@ -1330,193 +1249,78 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       // ── Tier 2: pay button (same 200ms tier as progress) ──
                       (() {
-                        Future<void> pay(int periodsToPay) async {
-                          if (inst.paidPayments < inst.totalPayments) {
-                            double evenlyDistributedPenalty = 0.0;
+                        Future<void> pay() async {
+                          if (inst.paidPayments >= inst.totalPayments) return;
 
-                            for (int i = 0; i < periodsToPay; i++) {
-                              inst.pastPayments = List.from(inst.pastPayments)
-                                ..add(
-                                  inst.monthlyPayment +
-                                      evenlyDistributedPenalty,
-                                );
-                            }
+                          inst.pastPayments = List.from(inst.pastPayments)
+                            ..add(inst.monthlyPayment);
+                          inst.paidMonths += inst.monthsPerPayment;
+                          inst.dueDate = DateTime(
+                            inst.dueDate.year,
+                            inst.dueDate.month + inst.monthsPerPayment,
+                            inst.dueDate.day,
+                          );
 
-                            int monthsToAdvance =
-                                periodsToPay * inst.monthsPerPayment;
-                            inst.paidMonths += monthsToAdvance;
-                            inst.dueDate = DateTime(
-                              inst.dueDate.year,
-                              inst.dueDate.month + monthsToAdvance,
-                              inst.dueDate.day,
-                            );
-
-                            if (inst.paidPayments >= inst.totalPayments) {
-                              inst.statusEnum = InstallmentStatus.paid;
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Installment fully paid! Moved to History tab. 🎉',
-                                    ),
-                                    backgroundColor: Colors.green,
-                                    behavior: SnackBarBehavior.floating,
+                          if (inst.paidPayments >= inst.totalPayments) {
+                            inst.statusEnum = InstallmentStatus.paid;
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Installment fully paid! Moved to History tab. 🎉',
                                   ),
-                                );
-                              }
-                            } else if (inst.statusEnum ==
-                                    InstallmentStatus.overdue &&
-                                inst.dueDate.isAfter(TimeService.now())) {
-                              inst.statusEnum = InstallmentStatus.active;
+                                  backgroundColor: Colors.green,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
                             }
-                            inst.lastPaidAt =
-                                TimeService.now(); // stamp payment time for billing cycle tracking
-                            await inst.save();
+                          } else if (inst.statusEnum ==
+                                  InstallmentStatus.overdue &&
+                              inst.dueDate.isAfter(TimeService.now())) {
+                            inst.statusEnum = InstallmentStatus.active;
                           }
+                          inst.lastPaidAt = TimeService.now();
+                          await inst.save();
                         }
 
-                        if (isAccelerated) {
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () => pay(regularPeriodsToPay),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.black,
-                                    side: BorderSide(color: Colors.grey[300]!),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                  ),
-                                  child: RichText(
-                                    textAlign: TextAlign.center,
-                                    text: TextSpan(
-                                      style: const TextStyle(
-                                        color: Colors.black,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                      children: [
-                                        TextSpan(
-                                          text: regularPeriodsToPay > 1
-                                              ? 'Pay $regularPeriodsToPay Arrears\n'
-                                              : 'Mark ${inst.paymentFrequency == 'Monthly'
-                                                    ? 'Month'
-                                                    : inst.paymentFrequency == 'Quarterly'
-                                                    ? 'Quarter'
-                                                    : inst.paymentFrequency == 'Semi-Annually'
-                                                    ? 'Half-Year'
-                                                    : 'Year'} as Paid\n',
-                                        ),
-                                        TextSpan(
-                                          text:
-                                              '(${currencyFormatter.format(regularTransactionCost)})',
-                                          style: TextStyle(
-                                            color: Colors.grey.shade600,
-                                            fontWeight: FontWeight.normal,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                        return SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: pay,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.black,
+                              side: BorderSide(color: Colors.grey[300]!),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () => pay(fullPeriodsToPay),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: 'Mark ${inst.periodNoun} as Paid\n',
+                                  ),
+                                  TextSpan(
+                                    text:
+                                        '(${currencyFormatter.format(inst.monthlyPayment)})',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.normal,
+                                      fontSize: 11,
                                     ),
                                   ),
-                                  child: RichText(
-                                    textAlign: TextAlign.center,
-                                    text: TextSpan(
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                      children: [
-                                        const TextSpan(
-                                          text: 'Settle Full Debt\n',
-                                        ),
-                                        TextSpan(
-                                          text:
-                                              '(${currencyFormatter.format(fullTransactionCost)})',
-                                          style: TextStyle(
-                                            color: Colors.red.shade100,
-                                            fontWeight: FontWeight.normal,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        } else {
-                          return SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                              onPressed: () => pay(regularPeriodsToPay),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.black,
-                                side: BorderSide(color: Colors.grey[300]!),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                              ),
-                              child: RichText(
-                                textAlign: TextAlign.center,
-                                text: TextSpan(
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                  children: [
-                                    TextSpan(
-                                      text: regularPeriodsToPay > 1
-                                          ? 'Pay $regularPeriodsToPay Arrears\n'
-                                          : 'Mark ${inst.paymentFrequency == 'Monthly'
-                                                ? 'Month'
-                                                : inst.paymentFrequency == 'Quarterly'
-                                                ? 'Quarter'
-                                                : inst.paymentFrequency == 'Semi-Annually'
-                                                ? 'Half-Year'
-                                                : 'Year'} as Paid\n',
-                                    ),
-                                    TextSpan(
-                                      text:
-                                          '(${currencyFormatter.format(regularTransactionCost)})',
-                                      style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontWeight: FontWeight.normal,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                ],
                               ),
                             ),
-                          );
-                        }
+                          ),
+                        );
                       })().popInIf(animate, 2),
                     ],
                   ],

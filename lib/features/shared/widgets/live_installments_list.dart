@@ -118,7 +118,7 @@ class _InstallmentTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${currency.format(row.totalAmount)} · ${row.months} mo',
+                      '${currency.format(row.totalAmount)} · ${row.totalMonths} mo',
                       style: TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
                   ],

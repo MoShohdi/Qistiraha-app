@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/engine/affordability_engine.dart';
-import 'package:qistiraha/core/engine/penalty_engine.dart';
 import 'package:qistiraha/core/services/hive_service.dart';
 import 'package:qistiraha/core/services/time_service.dart';
 import 'package:qistiraha/core/utils/responsive_layout.dart';
@@ -939,7 +938,7 @@ class _CheckoutCalculatorCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Section status banners — Debt-Free ETA + urgent payment/overdue alert,
 // mirroring the mobile Home screen's per-section (short/long-term) cards
-// exactly (same AffordabilityEngine/PenaltyEngine calls), restyled as
+// exactly (same AffordabilityEngine calls), restyled as
 // full-width desktop banners instead of stacked mobile cards.
 // ---------------------------------------------------------------------------
 class _SectionDebtFreeBanner extends StatelessWidget {
@@ -1047,7 +1046,6 @@ class _SectionUrgentBanner extends StatelessWidget {
       ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
     final nextInst = sorted.first;
 
-    final pr = PenaltyEngine.calculateLateFees(nextInst);
     final currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
 
     final now = TimeService.now();
@@ -1060,20 +1058,8 @@ class _SectionUrgentBanner extends StatelessWidget {
     final daysLate = justDate.difference(dueDateJustDate).inDays;
     final daysUntilDue = dueDateJustDate.difference(justDate).inDays;
 
-    double displayAmountDue;
-    if (pr.isAccelerated) {
-      displayAmountDue =
-          ((nextInst.totalMonths - nextInst.paidMonths) *
-              nextInst.monthlyPayment) +
-          pr.lateFee;
-    } else if (pr.lateFee > 0 || daysLate > 0) {
-      displayAmountDue =
-          (nextInst.monthlyPayment *
-              PenaltyEngine.calculateMissedMonths(nextInst)) +
-          pr.lateFee;
-    } else {
-      displayAmountDue = nextInst.monthlyPayment;
-    }
+    // No penalties: the amount due is always the next period's payment.
+    final displayAmountDue = nextInst.monthlyPayment;
 
     final amountStr = currency.format(displayAmountDue);
     final itemDetails = '${nextInst.provider} (${nextInst.itemDescription})';
@@ -1083,15 +1069,8 @@ class _SectionUrgentBanner extends StatelessWidget {
     final Color textColor;
     final IconData iconData;
 
-    if (pr.isAccelerated) {
-      warningText =
-          'DEFAULT: Entire balance of $amountStr is due for $itemDetails!';
-      bgColor = const Color(0xFFFFF0F0);
-      textColor = Colors.red[800]!;
-      iconData = Icons.error_outline;
-    } else if (daysLate > 0) {
-      warningText =
-          'Payment is late. Please contact your lender for late fees details.';
+    if (daysLate > 0) {
+      warningText = 'Payment is overdue for $itemDetails. Pay $amountStr';
       bgColor = const Color(0xFFFFF0F0);
       textColor = Colors.red[800]!;
       iconData = Icons.warning_amber_rounded;
@@ -1510,47 +1489,27 @@ _BucketResult _computeBuckets(List<Installment> installments, String filter) {
 
   for (final inst in installments) {
     if (inst.statusEnum == InstallmentStatus.paid) continue;
-    final pr = PenaltyEngine.calculateLateFees(inst);
 
-    if (pr.isAccelerated) {
-      final remaining = inst.totalPayments - inst.paidPayments;
-      final amount = (remaining * inst.monthlyPayment) + pr.lateFee;
-      if (amount > 0) buckets[0] += amount;
-    } else {
-      final missed = PenaltyEngine.calculateUncappedMissedPeriods(inst);
-      if (missed > 0) {
-        final amount = (missed * inst.monthlyPayment) + pr.lateFee;
-        buckets[0] += amount;
-      }
+    // No penalties/acceleration: project each remaining payment forward from
+    // its due date by the plan's frequency step.
+    int paymentsAdded = 0;
+    final remainingPayments = inst.totalPayments - inst.paidPayments;
+    DateTime projectedDate = inst.dueDate;
 
-      int paymentsAdded = 0;
-      final remainingPayments = inst.totalPayments - inst.paidPayments;
-      DateTime projectedDate = inst.dueDate;
-
-      if (missed > 0) {
-        final monthsToAdvance = missed * inst.monthsPerPayment;
-        projectedDate = DateTime(
-          projectedDate.year,
-          projectedDate.month + monthsToAdvance,
-          projectedDate.day,
-        );
-      }
-
-      while (paymentsAdded < remainingPayments) {
-        final monthsDiff =
-            ((projectedDate.year - now.year) * 12) +
-            projectedDate.month -
-            now.month;
-        final bucketIndex = monthsDiff ~/ stepSize;
-        if (bucketIndex >= numBuckets) break;
-        if (bucketIndex >= 0) buckets[bucketIndex] += inst.monthlyPayment;
-        projectedDate = DateTime(
-          projectedDate.year,
-          projectedDate.month + inst.monthsPerPayment,
-          projectedDate.day,
-        );
-        paymentsAdded++;
-      }
+    while (paymentsAdded < remainingPayments) {
+      final monthsDiff =
+          ((projectedDate.year - now.year) * 12) +
+          projectedDate.month -
+          now.month;
+      final bucketIndex = monthsDiff ~/ stepSize;
+      if (bucketIndex >= numBuckets) break;
+      if (bucketIndex >= 0) buckets[bucketIndex] += inst.monthlyPayment;
+      projectedDate = DateTime(
+        projectedDate.year,
+        projectedDate.month + inst.monthsPerPayment,
+        projectedDate.day,
+      );
+      paymentsAdded++;
     }
   }
 
@@ -2212,19 +2171,16 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
     final entries = <_TimelineEntry>[];
 
     if (_inst.paidPayments < _inst.totalPayments) {
-      final pr = PenaltyEngine.calculateLateFees(_inst);
-      final upcomingAmount = _inst.monthlyPayment + pr.lateFee;
+      // No late fees: the next payment is simply the upcoming period amount.
       entries.add(
         _TimelineEntry(
           title: 'Payment ${_inst.paidPayments + 1}',
           date: _inst.dueDate,
-          amount: upcomingAmount,
-          status: pr.lateFee > 0 ? 'LATE' : 'UPCOMING',
-          statusBg: pr.lateFee > 0 ? Colors.red[50]! : Colors.grey[200]!,
-          statusFg: pr.lateFee > 0 ? Colors.red : Colors.black87,
-          icon: pr.lateFee > 0
-              ? Icons.warning_amber_rounded
-              : Icons.access_time,
+          amount: _inst.monthlyPayment,
+          status: 'UPCOMING',
+          statusBg: Colors.grey[200]!,
+          statusFg: Colors.black87,
+          icon: Icons.access_time,
         ),
       );
     }
@@ -2234,16 +2190,15 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
           ? _inst.pastPayments[i]
           : _inst.monthlyPayment;
       final pastDate = _inst.dueDateForPeriodsBack(_inst.paidPayments - i);
-      final wasLate = amount > _inst.monthlyPayment;
       entries.add(
         _TimelineEntry(
           title: 'Payment ${i + 1}',
           date: pastDate,
           amount: amount,
-          status: wasLate ? 'PAID (LATE)' : 'PAID',
-          statusBg: wasLate ? Colors.red[50]! : Colors.green[50]!,
-          statusFg: wasLate ? Colors.red : Colors.green,
-          icon: wasLate ? Icons.warning_rounded : Icons.check_circle,
+          status: 'PAID',
+          statusBg: Colors.green[50]!,
+          statusFg: Colors.green,
+          icon: Icons.check_circle,
         ),
       );
     }
@@ -2251,19 +2206,17 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
     return entries;
   }
 
-  Future<void> _pay(int periodsToPay) async {
-    final pr = PenaltyEngine.calculateLateFees(_inst);
-    final evenlyDistributedPenalty = pr.lateFee / periodsToPay;
-    for (int i = 0; i < periodsToPay; i++) {
-      _inst.pastPayments = List.from(_inst.pastPayments)
-        ..add(_inst.monthlyPayment + evenlyDistributedPenalty);
-    }
+  /// Records a single on-time period payment — no penalties, no arrears.
+  Future<void> _pay() async {
+    if (_inst.paidPayments >= _inst.totalPayments) return;
 
-    final monthsToAdvance = periodsToPay * _inst.monthsPerPayment;
-    _inst.paidMonths += monthsToAdvance;
+    _inst.pastPayments = List.from(_inst.pastPayments)
+      ..add(_inst.monthlyPayment);
+
+    _inst.paidMonths += _inst.monthsPerPayment;
     _inst.dueDate = DateTime(
       _inst.dueDate.year,
-      _inst.dueDate.month + monthsToAdvance,
+      _inst.dueDate.month + _inst.monthsPerPayment,
       _inst.dueDate.day,
     );
 
@@ -2331,9 +2284,7 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
   Widget build(BuildContext context) {
     final meta = _statusMeta(_inst.statusEnum);
     final remainingMonths = _inst.totalMonths - _inst.paidMonths;
-    double remainingDebt = remainingMonths * _inst.monthlyPayment;
-    final pr = PenaltyEngine.calculateLateFees(_inst);
-    remainingDebt += pr.lateFee;
+    final double remainingDebt = remainingMonths * _inst.monthlyPayment;
     final timeline = _buildTimeline();
     final canDelete = _inst.merchantId == null || _inst.merchantId!.isEmpty;
 
@@ -2434,7 +2385,6 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
                       installment: _inst,
                       currency: _currency,
                       remainingDebt: remainingDebt,
-                      penalty: pr,
                       canDelete: canDelete,
                       onPay: _pay,
                       onDelete: _confirmDelete,
@@ -2614,16 +2564,14 @@ class _DebtBreakdownColumn extends StatelessWidget {
   final Installment installment;
   final NumberFormat currency;
   final double remainingDebt;
-  final PenaltyResult penalty;
   final bool canDelete;
-  final Future<void> Function(int periodsToPay) onPay;
+  final Future<void> Function() onPay;
   final VoidCallback onDelete;
 
   const _DebtBreakdownColumn({
     required this.installment,
     required this.currency,
     required this.remainingDebt,
-    required this.penalty,
     required this.canDelete,
     required this.onPay,
     required this.onDelete,
@@ -2632,16 +2580,6 @@ class _DebtBreakdownColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPaid = installment.statusEnum == InstallmentStatus.paid;
-    final isAccelerated = penalty.isAccelerated;
-    final regularPeriodsToPay = PenaltyEngine.calculateActualPeriodsToPay(
-      installment,
-    ).clamp(0, installment.totalPayments - installment.paidPayments);
-    final fullPeriodsToPay =
-        installment.totalPayments - installment.paidPayments;
-    final regularCost =
-        (installment.monthlyPayment * regularPeriodsToPay) + penalty.lateFee;
-    final fullCost =
-        (installment.monthlyPayment * fullPeriodsToPay) + penalty.lateFee;
 
     return Scrollbar(
       child: SingleChildScrollView(
@@ -2729,37 +2667,11 @@ class _DebtBreakdownColumn extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isAccelerated ? Colors.red : Colors.grey[200]!,
-                    width: isAccelerated ? 2 : 1,
-                  ),
+                  border: Border.all(color: Colors.grey[200]!),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (isAccelerated) ...[
-                      const Row(
-                        children: [
-                          Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.red,
-                            size: 18,
-                          ),
-                          SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'DEFAULT STATUS: ENTIRE BALANCE DUE',
-                              style: TextStyle(
-                                color: Colors.red,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                    ],
                     Text(
                       installment.paymentFrequencyLabel.toUpperCase(),
                       style: const TextStyle(
@@ -2795,81 +2707,30 @@ class _DebtBreakdownColumn extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (!isPaid) ...[
-                      const SizedBox(height: 16),
-                      if (isAccelerated) ...[
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            onPressed: () => onPay(regularPeriodsToPay),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.black,
-                              side: BorderSide(color: Colors.grey[300]!),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            child: Text(
-                              'Pay $regularPeriodsToPay Arrears (${currency.format(regularCost)})',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => onPay(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _kBrand,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => onPay(fullPeriodsToPay),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            child: Text(
-                              'Settle Full Debt (${currency.format(fullCost)})',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
+                        child: Text(
+                          'Mark ${installment.periodNoun} as Paid (${currency.format(installment.monthlyPayment)})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
                           ),
+                          textAlign: TextAlign.center,
                         ),
-                      ] else
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => onPay(regularPeriodsToPay),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _kBrand,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            child: Text(
-                              regularPeriodsToPay > 1
-                                  ? 'Pay $regularPeriodsToPay Arrears (${currency.format(regularCost)})'
-                                  : 'Mark as Paid (${currency.format(regularCost)})',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                    ],
+                      ),
+                    ),
                   ],
                 ),
               ),

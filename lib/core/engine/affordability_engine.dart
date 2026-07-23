@@ -2,7 +2,6 @@ import 'package:qistiraha/features/auth/models/user_account.dart';
 import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/core/services/time_service.dart';
-import 'penalty_engine.dart';
 
 // ---------------------------------------------------------------------------
 // Data holders
@@ -93,33 +92,20 @@ class AffordabilityEngine {
 
     double total = 0.0;
     for (var inst in user.installments!) {
-      if (inst.statusEnum != InstallmentStatus.paid) {
-        PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
-        DateTime dueDateJustDate = DateTime(
-          inst.dueDate.year,
-          inst.dueDate.month,
-          inst.dueDate.day,
-        );
-        int daysLate = justDate.difference(dueDateJustDate).inDays;
+      if (inst.statusEnum == InstallmentStatus.paid) continue;
+      DateTime dueDateJustDate = DateTime(
+        inst.dueDate.year,
+        inst.dueDate.month,
+        inst.dueDate.day,
+      );
+      int daysLate = justDate.difference(dueDateJustDate).inDays;
+      bool dueThisMonth =
+          inst.dueDate.year == now.year && inst.dueDate.month == now.month;
 
-        if (daysLate > 0 || pr.isAccelerated) {
-          double displayAmountDue;
-          if (pr.isAccelerated) {
-            displayAmountDue =
-                ((inst.totalMonths - inst.paidMonths) *
-                    _getMonthlyDrain(inst)) +
-                pr.lateFee;
-          } else {
-            displayAmountDue =
-                (_getMonthlyDrain(inst) *
-                    PenaltyEngine.calculateMissedMonths(inst)) +
-                pr.lateFee;
-          }
-          total += displayAmountDue;
-        } else if (inst.dueDate.year == now.year &&
-            inst.dueDate.month == now.month) {
-          total += _getMonthlyDrain(inst);
-        }
+      // No late fees / acceleration: a plan simply owes its base monthly
+      // drain when it is due this month or already past due.
+      if (daysLate > 0 || dueThisMonth) {
+        total += _getMonthlyDrain(inst);
       }
     }
     return total;
@@ -133,7 +119,6 @@ class AffordabilityEngine {
       if (inst.statusEnum != InstallmentStatus.paid) {
         int remainingMonths = inst.totalMonths - inst.paidMonths;
         total += remainingMonths * inst.monthlyPayment;
-        total += PenaltyEngine.calculateLateFees(inst).lateFee;
       }
     }
     return total;
@@ -236,8 +221,7 @@ class AffordabilityEngine {
       bool isOverdue = dueJust.isBefore(today);
 
       if (isDueInCycle || isOverdue) {
-        PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
-        total += _getMonthlyDrain(inst) + pr.lateFee;
+        total += _getMonthlyDrain(inst);
       }
     }
     return total;
@@ -268,8 +252,7 @@ class AffordabilityEngine {
       bool isOverdue = dueJust.isBefore(today);
 
       if (isDueInCycle || isOverdue) {
-        PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
-        total += _getMonthlyDrain(inst) + pr.lateFee;
+        total += _getMonthlyDrain(inst);
       }
     }
     return total;
