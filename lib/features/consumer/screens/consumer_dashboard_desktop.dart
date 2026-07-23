@@ -1,18 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:qistiraha/core/engine/affordability_engine.dart';
-import 'package:qistiraha/core/services/hive_service.dart';
+import 'package:qistiraha/core/engine/affordability_live.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/services/time_service.dart';
 import 'package:qistiraha/core/utils/responsive_layout.dart';
-import 'package:qistiraha/features/auth/models/user_account.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
 import 'package:qistiraha/features/auth/screens/login_screen_desktop.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
-import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
-import 'package:qistiraha/widgets/income_edit_bottom_sheet.dart';
 import 'add_installment_screen.dart';
 import 'add_installment_desktop.dart';
 
@@ -29,37 +24,19 @@ class _StatusMeta {
   const _StatusMeta(this.color, this.label);
 }
 
-_StatusMeta _statusMeta(InstallmentStatus status) {
-  switch (status) {
-    case InstallmentStatus.overdue:
-      return const _StatusMeta(Colors.red, 'Overdue');
-    case InstallmentStatus.paid:
-      return const _StatusMeta(Colors.green, 'Paid');
-    case InstallmentStatus.defaulted:
-      return _StatusMeta(Colors.red[900]!, 'Defaulted');
-    case InstallmentStatus.active:
-      return const _StatusMeta(_kBrand, 'Active');
-  }
+/// Status chip for a live installment row. Overdue is derived from the due
+/// date (no penalty state); completed maps to "Paid".
+_StatusMeta _statusMeta(InstallmentRow row) {
+  if (row.isCompleted) return const _StatusMeta(Colors.green, 'Paid');
+  if (row.isOverdue) return const _StatusMeta(Colors.red, 'Overdue');
+  return const _StatusMeta(_kBrand, 'Active');
 }
 
-/// Converts a per-period payment into an effective monthly amount —
-/// quarterly/semi-annual/annual plans still contribute their fair share to
-/// month-over-month totals instead of spiking a single bucket.
-double _normalizedMonthlyAmount(Installment i) {
-  switch (i.paymentFrequency) {
-    case 'Quarterly':
-      return i.monthlyPayment / 3;
-    case 'Semi-Annually':
-      return i.monthlyPayment / 6;
-    case 'Annually':
-      return i.monthlyPayment / 12;
-    case 'Monthly':
-    default:
-      return i.monthlyPayment;
-  }
-}
+/// Effective monthly amount for a plan — quarterly/semi-annual/annual plans
+/// contribute their fair per-month share instead of spiking a single bucket.
+double _normalizedMonthlyAmount(InstallmentRow i) => i.monthlyDrain;
 
-double _totalPaidSoFar(Installment i) {
+double _totalPaidSoFar(InstallmentRow i) {
   if (i.pastPayments.isNotEmpty) {
     return i.pastPayments.fold(0.0, (a, b) => a + b);
   }
@@ -140,6 +117,63 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
   final _currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
   _ConsumerNav _nav = _ConsumerNav.overview;
 
+  // Income/salary/name now live on the Supabase profile, not Hive. Fetched
+  // once at mount (and again after an income edit); the installment list
+  // itself streams live via DatabaseService.consumerInstallments().
+  double _income = 0;
+  int _salaryDay = 1;
+  String _name = '';
+  bool _profileLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final p = await DatabaseService.profileFinance();
+    if (!mounted) return;
+    setState(() {
+      _income = p.monthlyIncome;
+      _salaryDay = p.salaryDay;
+      _name = p.name;
+      _profileLoaded = true;
+    });
+  }
+
+  Future<void> _editIncome() async {
+    final controller = TextEditingController(
+      text: _income > 0 ? _income.toStringAsFixed(0) : '',
+    );
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Monthly Income'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(prefixText: 'EGP ', hintText: '0'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.pop(context, double.tryParse(controller.text)),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await DatabaseService.updateIncome(result, salaryDay: _salaryDay);
+    await _loadProfile();
+  }
+
   Future<void> _logout(BuildContext context) async {
     await AuthService.signOut();
     if (context.mounted) {
@@ -156,7 +190,7 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
     }
   }
 
-  void _openDetail(Installment installment) {
+  void _openDetail(InstallmentRow installment) {
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.5),
@@ -166,78 +200,77 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder(
-      valueListenable: HiveService.getUserBox().listenable(),
-      builder: (context, Box<UserAccount> userBox, _) {
-        if (userBox.isEmpty) {
-          return const Scaffold(
-            backgroundColor: _kBg,
-            body: Center(child: Text('No user data found.')),
-          );
-        }
-        final user = userBox.values.first;
+    return StreamBuilder<List<InstallmentRow>>(
+      stream: DatabaseService.consumerInstallments(),
+      builder: (context, snapshot) {
+        final all = snapshot.data ?? const <InstallmentRow>[];
+        final loading =
+            !_profileLoaded ||
+            snapshot.connectionState == ConnectionState.waiting;
 
-        return ValueListenableBuilder(
-          valueListenable: HiveService.getInstallmentBox().listenable(),
-          builder: (context, Box<Installment> installmentBox, _) {
-            final all = user.installments?.toList() ?? <Installment>[];
-
-            return Scaffold(
-              backgroundColor: _kBg,
-              body: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _Sidebar(
-                    userName: user.name,
-                    nav: _nav,
-                    onSelectNav: (n) => setState(() => _nav = n),
-                    onAddInstallment: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ResponsiveLayout(
-                            mobileWidget: AddInstallmentScreen(),
-                            desktopWidget: AddInstallmentDesktopScreen(),
-                          ),
-                        ),
-                      );
-                    },
-                    onLogout: () => _logout(context),
-                  ),
-                  Expanded(child: _buildMainContent(user, all)),
-                ],
+        return Scaffold(
+          backgroundColor: _kBg,
+          body: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Sidebar(
+                userName: _name.isEmpty ? 'You' : _name,
+                nav: _nav,
+                onSelectNav: (n) => setState(() => _nav = n),
+                onAddInstallment: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ResponsiveLayout(
+                        mobileWidget: AddInstallmentScreen(),
+                        desktopWidget: AddInstallmentDesktopScreen(),
+                      ),
+                    ),
+                  );
+                },
+                onLogout: () => _logout(context),
               ),
-            );
-          },
+              Expanded(
+                child: loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _buildMainContent(all),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildMainContent(UserAccount user, List<Installment> all) {
+  Widget _buildMainContent(List<InstallmentRow> all) {
     switch (_nav) {
       case _ConsumerNav.overview:
-        final active =
-            all.where((i) => i.statusEnum != InstallmentStatus.paid).toList()
-              ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+        final active = all.where((i) => !i.isCompleted).toList()
+          ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
         return _OverviewTab(
-          user: user,
+          income: _income,
+          salaryDay: _salaryDay,
           allInstallments: all,
           activeInstallments: active,
           currency: _currency,
           onSelectInstallment: _openDetail,
         );
       case _ConsumerNav.history:
-        final paid =
-            all.where((i) => i.statusEnum == InstallmentStatus.paid).toList()
-              ..sort((a, b) => b.dueDate.compareTo(a.dueDate));
+        final paid = all.where((i) => i.isCompleted).toList()
+          ..sort((a, b) => b.dueDate.compareTo(a.dueDate));
         return _HistoryTab(
           paidInstallments: paid,
           currency: _currency,
           onSelectInstallment: _openDetail,
         );
       case _ConsumerNav.insights:
-        return _InsightsTab(user: user, installments: all, currency: _currency);
+        return _InsightsTab(
+          income: _income,
+          salaryDay: _salaryDay,
+          installments: all,
+          currency: _currency,
+          onEditIncome: _editIncome,
+        );
     }
   }
 }
@@ -472,14 +505,16 @@ class _NavItemState extends State<_NavItem> {
 // Overview — KPI row + active plans grid
 // ---------------------------------------------------------------------------
 class _OverviewTab extends StatefulWidget {
-  final UserAccount user;
-  final List<Installment> allInstallments;
-  final List<Installment> activeInstallments;
+  final double income;
+  final int salaryDay;
+  final List<InstallmentRow> allInstallments;
+  final List<InstallmentRow> activeInstallments;
   final NumberFormat currency;
-  final ValueChanged<Installment> onSelectInstallment;
+  final ValueChanged<InstallmentRow> onSelectInstallment;
 
   const _OverviewTab({
-    required this.user,
+    required this.income,
+    required this.salaryDay,
     required this.allInstallments,
     required this.activeInstallments,
     required this.currency,
@@ -513,13 +548,13 @@ class _OverviewTabState extends State<_OverviewTab> {
       setState(() => _outlook = null);
       return;
     }
-    final outlook = AffordabilityEngine.simulatePurchase(
+    final outlook = LiveAffordabilityEngine.simulatePurchase(
       itemCost: cost,
       months: months,
       downPayment: downPayment,
       existing: widget.allInstallments,
-      monthlyIncome: widget.user.monthlyIncome,
-      salaryDay: widget.user.salaryDay,
+      monthlyIncome: widget.income,
+      salaryDay: widget.salaryDay,
     );
     setState(() => _outlook = outlook);
   }
@@ -535,7 +570,7 @@ class _OverviewTabState extends State<_OverviewTab> {
 
   Widget _buildSection({
     required String title,
-    required List<Installment> sectionActive,
+    required List<InstallmentRow> sectionActive,
     required bool isLongTerm,
     required String debtFreeTitlePrefix,
   }) {
@@ -596,13 +631,15 @@ class _OverviewTabState extends State<_OverviewTab> {
     final shortTermActive = active.where((i) => !i.isLongTerm).toList();
     final longTermActive = active.where((i) => i.isLongTerm).toList();
 
-    final totalOutstanding = AffordabilityEngine.calculateTotalOutstandingDebt(
-      widget.user,
+    final totalOutstanding = LiveAffordabilityEngine.totalOutstandingDebt(
+      widget.allInstallments,
     );
-    final monthlyPaymentThisMonth =
-        AffordabilityEngine.calculateTotalMonthlyPayment(widget.user);
-    final affordabilityStatus = AffordabilityEngine.calculateStatus(
-      widget.user,
+    final monthlyPaymentThisMonth = LiveAffordabilityEngine.totalMonthlyPayment(
+      widget.allInstallments,
+    );
+    final affordabilityStatus = LiveAffordabilityEngine.status(
+      widget.allInstallments,
+      widget.income,
     );
     final nextDue = active.isNotEmpty ? active.first : null;
 
@@ -942,7 +979,7 @@ class _CheckoutCalculatorCard extends StatelessWidget {
 // full-width desktop banners instead of stacked mobile cards.
 // ---------------------------------------------------------------------------
 class _SectionDebtFreeBanner extends StatelessWidget {
-  final List<Installment> sectionActive;
+  final List<InstallmentRow> sectionActive;
   final bool isLongTerm;
   final String titlePrefix;
 
@@ -954,7 +991,7 @@ class _SectionDebtFreeBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final debtFreeDate = AffordabilityEngine.getAbsoluteDebtFreeDate(
+    final debtFreeDate = LiveAffordabilityEngine.absoluteDebtFreeDate(
       sectionActive,
     );
     final now = TimeService.now();
@@ -1034,7 +1071,7 @@ class _SectionDebtFreeBanner extends StatelessWidget {
 }
 
 class _SectionUrgentBanner extends StatelessWidget {
-  final List<Installment> sectionActive;
+  final List<InstallmentRow> sectionActive;
 
   const _SectionUrgentBanner({required this.sectionActive});
 
@@ -1118,7 +1155,7 @@ class _SectionUrgentBanner extends StatelessWidget {
 // Installment grid card (shared by Overview + History)
 // ---------------------------------------------------------------------------
 class _InstallmentGridCard extends StatelessWidget {
-  final Installment installment;
+  final InstallmentRow installment;
   final NumberFormat currency;
   final VoidCallback onTap;
 
@@ -1130,7 +1167,7 @@ class _InstallmentGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final meta = _statusMeta(installment.statusEnum);
+    final meta = _statusMeta(installment);
 
     // The lender/provider (who the money is owed to — e.g. "Valu", a bank)
     // is the headline; the store + item are secondary context. For
@@ -1255,9 +1292,9 @@ class _InstallmentGridCard extends StatelessWidget {
 // History — completed plans grid
 // ---------------------------------------------------------------------------
 class _HistoryTab extends StatefulWidget {
-  final List<Installment> paidInstallments;
+  final List<InstallmentRow> paidInstallments;
   final NumberFormat currency;
-  final ValueChanged<Installment> onSelectInstallment;
+  final ValueChanged<InstallmentRow> onSelectInstallment;
 
   const _HistoryTab({
     required this.paidInstallments,
@@ -1449,7 +1486,10 @@ class _BucketResult {
 /// Dynamic payment-projection buckets, ported verbatim from the mobile
 /// Insights screen so the desktop chart shows exactly the same numbers for
 /// the same filter (All/Quarterly/Semi-Annually/Annually).
-_BucketResult _computeBuckets(List<Installment> installments, String filter) {
+_BucketResult _computeBuckets(
+  List<InstallmentRow> installments,
+  String filter,
+) {
   int stepSize = 1;
   int numBuckets = 6;
 
@@ -1488,7 +1528,7 @@ _BucketResult _computeBuckets(List<Installment> installments, String filter) {
   final buckets = List<double>.filled(numBuckets, 0.0);
 
   for (final inst in installments) {
-    if (inst.statusEnum == InstallmentStatus.paid) continue;
+    if (inst.isCompleted) continue;
 
     // No penalties/acceleration: project each remaining payment forward from
     // its due date by the plan's frequency step.
@@ -1517,14 +1557,18 @@ _BucketResult _computeBuckets(List<Installment> installments, String filter) {
 }
 
 class _InsightsTab extends StatefulWidget {
-  final UserAccount user;
-  final List<Installment> installments;
+  final double income;
+  final int salaryDay;
+  final List<InstallmentRow> installments;
   final NumberFormat currency;
+  final VoidCallback onEditIncome;
 
   const _InsightsTab({
-    required this.user,
+    required this.income,
+    required this.salaryDay,
     required this.installments,
     required this.currency,
+    required this.onEditIncome,
   });
 
   @override
@@ -1544,7 +1588,7 @@ class _InsightsTabState extends State<_InsightsTab> {
   List<_CategorySlice> _categoryBreakdown() {
     final Map<String, _CategorySlice> grouped = {};
     for (final inst in widget.installments) {
-      if (inst.statusEnum == InstallmentStatus.paid) continue;
+      if (inst.isCompleted) continue;
       final key = inst.category.trim().isEmpty ? 'Other' : inst.category.trim();
       grouped.putIfAbsent(key, () => _CategorySlice(key));
       grouped[key]!.amount += _normalizedMonthlyAmount(inst);
@@ -1566,11 +1610,9 @@ class _InsightsTabState extends State<_InsightsTab> {
       );
     }
 
-    final active = widget.installments
-        .where((i) => i.statusEnum != InstallmentStatus.paid)
-        .toList();
+    final active = widget.installments.where((i) => !i.isCompleted).toList();
     final paidCount = widget.installments.length - active.length;
-    final totalActiveAmount = active.fold(0.0, (sum, i) => sum + i.amount);
+    final totalActiveAmount = active.fold(0.0, (sum, i) => sum + i.totalAmount);
     final totalActivePaid = active.fold(
       0.0,
       (sum, i) => sum + _totalPaidSoFar(i),
@@ -1598,22 +1640,18 @@ class _InsightsTabState extends State<_InsightsTab> {
               ),
               const SizedBox(height: 20),
               _SpendAdvisorBanner(
-                user: widget.user,
+                income: widget.income,
+                salaryDay: widget.salaryDay,
                 installments: widget.installments,
                 currency: widget.currency,
               ),
               const SizedBox(height: 24),
               _IncomeBarCard(
-                user: widget.user,
+                income: widget.income,
+                salaryDay: widget.salaryDay,
                 installments: widget.installments,
                 currency: widget.currency,
-                onEditIncome: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (context) => const IncomeEditBottomSheet(),
-                  );
-                },
+                onEditIncome: widget.onEditIncome,
               ),
               const SizedBox(height: 24),
               _DebtFreeProgressCard(
@@ -1685,12 +1723,14 @@ class _InsightsTabState extends State<_InsightsTab> {
 // spend tiers), restyled as a desktop banner.
 // ---------------------------------------------------------------------------
 class _SpendAdvisorBanner extends StatelessWidget {
-  final UserAccount user;
-  final List<Installment> installments;
+  final double income;
+  final int salaryDay;
+  final List<InstallmentRow> installments;
   final NumberFormat currency;
 
   const _SpendAdvisorBanner({
-    required this.user,
+    required this.income,
+    required this.salaryDay,
     required this.installments,
     required this.currency,
   });
@@ -1698,24 +1738,17 @@ class _SpendAdvisorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = TimeService.now();
-    final cycle = AffordabilityEngine.getCurrentBillingCycle(
-      user.salaryDay,
-      now,
-    );
+    final cycle = LiveAffordabilityEngine.currentBillingCycle(salaryDay, now);
 
-    final safeToSpend = AffordabilityEngine.calculateSafeToSpend(
+    final safeToSpend = LiveAffordabilityEngine.safeToSpend(
       installments,
-      user.monthlyIncome,
-      user.salaryDay,
+      income,
+      salaryDay,
     );
-    final owed = AffordabilityEngine.getOwedInCycle(installments, cycle);
-    final paid = AffordabilityEngine.getPaidInCycle(installments, cycle);
-    final usedPct = user.monthlyIncome > 0
-        ? ((owed + paid) / user.monthlyIncome) * 100
-        : 0.0;
-    final pct = user.monthlyIncome > 0
-        ? (owed + paid) / user.monthlyIncome
-        : 0.0;
+    final owed = LiveAffordabilityEngine.owedInCycle(installments, cycle);
+    final paid = LiveAffordabilityEngine.paidInCycle(installments, cycle);
+    final usedPct = income > 0 ? ((owed + paid) / income) * 100 : 0.0;
+    final pct = income > 0 ? (owed + paid) / income : 0.0;
     final status = _getBudgetStatus(pct);
 
     final isOverBudget = safeToSpend < 0;
@@ -1796,13 +1829,15 @@ class _SpendAdvisorBanner extends StatelessWidget {
 // exactly (same billing-cycle math), with the same income-edit entry point.
 // ---------------------------------------------------------------------------
 class _IncomeBarCard extends StatelessWidget {
-  final UserAccount user;
-  final List<Installment> installments;
+  final double income;
+  final int salaryDay;
+  final List<InstallmentRow> installments;
   final NumberFormat currency;
   final VoidCallback onEditIncome;
 
   const _IncomeBarCard({
-    required this.user,
+    required this.income,
+    required this.salaryDay,
     required this.installments,
     required this.currency,
     required this.onEditIncome,
@@ -1811,18 +1846,14 @@ class _IncomeBarCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = TimeService.now();
-    final cycle = AffordabilityEngine.getCurrentBillingCycle(
-      user.salaryDay,
-      now,
-    );
-    final owed = AffordabilityEngine.getOwedInCycle(installments, cycle);
-    final paid = AffordabilityEngine.getPaidInCycle(installments, cycle);
+    final cycle = LiveAffordabilityEngine.currentBillingCycle(salaryDay, now);
+    final owed = LiveAffordabilityEngine.owedInCycle(installments, cycle);
+    final paid = LiveAffordabilityEngine.paidInCycle(installments, cycle);
     final totalCommitted = owed + paid;
-    final income = user.monthlyIncome;
-    final available = AffordabilityEngine.calculateSafeToSpend(
+    final available = LiveAffordabilityEngine.safeToSpend(
       installments,
       income,
-      user.salaryDay,
+      salaryDay,
     );
     final percentage = income > 0 ? (totalCommitted / income) : 0.0;
     final status = _getBudgetStatus(percentage);
@@ -2149,7 +2180,7 @@ class _TimelineEntry {
 }
 
 class _ConsumerDetailDialog extends StatefulWidget {
-  final Installment installment;
+  final InstallmentRow installment;
   const _ConsumerDetailDialog({required this.installment});
 
   @override
@@ -2159,7 +2190,9 @@ class _ConsumerDetailDialog extends StatefulWidget {
 class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
   final _currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 2);
 
-  Installment get _inst => widget.installment;
+  // Held in state so an in-dialog payment can refresh it from Supabase
+  // without closing the dialog.
+  late InstallmentRow _inst = widget.installment;
 
   /// One node per *payment period*, not per month — a 60-month plan billed
   /// Quarterly yields 20 nodes, not 60. Node status maps to periods too
@@ -2206,33 +2239,26 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
     return entries;
   }
 
-  /// Records a single on-time period payment — no penalties, no arrears.
+  /// Records a single on-time period payment via Supabase — no penalties, no
+  /// arrears. The live stream behind the dialog updates on its own; here we
+  /// refetch the row so the open dialog reflects the new progress too (or
+  /// close it once the plan is fully paid).
   Future<void> _pay() async {
     if (_inst.paidPayments >= _inst.totalPayments) return;
 
-    _inst.pastPayments = List.from(_inst.pastPayments)
-      ..add(_inst.monthlyPayment);
-
-    _inst.paidMonths += _inst.monthsPerPayment;
-    _inst.dueDate = DateTime(
-      _inst.dueDate.year,
-      _inst.dueDate.month + _inst.monthsPerPayment,
-      _inst.dueDate.day,
-    );
-
-    bool didComplete = false;
-    if (_inst.paidPayments >= _inst.totalPayments) {
-      _inst.statusEnum = InstallmentStatus.paid;
-      didComplete = true;
-    } else if (_inst.statusEnum == InstallmentStatus.overdue &&
-        _inst.dueDate.isAfter(TimeService.now())) {
-      _inst.statusEnum = InstallmentStatus.active;
+    try {
+      await DatabaseService.recordPayment(_inst);
+    } catch (_) {
+      if (mounted) {
+        showDesktopSnackBar(context, message: 'Could not record payment.');
+      }
+      return;
     }
-    _inst.lastPaidAt = TimeService.now();
-    await _inst.save();
 
+    final updated = await DatabaseService.fetchInstallment(_inst.id);
     if (!mounted) return;
-    if (didComplete) {
+
+    if (updated == null || updated.isCompleted) {
       showDesktopSnackBar(
         context,
         message: 'Installment fully paid! Moved to History. 🎉',
@@ -2240,53 +2266,19 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
       );
       Navigator.pop(context);
     } else {
-      setState(() {});
+      setState(() => _inst = updated);
     }
-  }
-
-  Future<void> _confirmDelete() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Installment'),
-        content: const Text(
-          'Are you sure you want to delete this installment? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    final userBox = HiveService.getUserBox();
-    if (userBox.isNotEmpty) {
-      final user = userBox.values.first;
-      user.installments?.remove(_inst);
-      await user.save();
-    }
-    await _inst.delete();
-
-    if (!mounted) return;
-    showDesktopSnackBar(context, message: 'Installment deleted');
-    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final meta = _statusMeta(_inst.statusEnum);
+    final meta = _statusMeta(_inst);
     final remainingMonths = _inst.totalMonths - _inst.paidMonths;
     final double remainingDebt = remainingMonths * _inst.monthlyPayment;
     final timeline = _buildTimeline();
-    final canDelete = _inst.merchantId == null || _inst.merchantId!.isEmpty;
+    // In the marketplace model the merchant owns the contract (RLS lets only
+    // them delete it), so the consumer's detail view is never deletable here.
+    const canDelete = false;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
@@ -2387,7 +2379,7 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
                       remainingDebt: remainingDebt,
                       canDelete: canDelete,
                       onPay: _pay,
-                      onDelete: _confirmDelete,
+                      onDelete: () {},
                     ),
                   ),
                 ],
@@ -2561,7 +2553,7 @@ class _TimelineTile extends StatelessWidget {
 }
 
 class _DebtBreakdownColumn extends StatelessWidget {
-  final Installment installment;
+  final InstallmentRow installment;
   final NumberFormat currency;
   final double remainingDebt;
   final bool canDelete;
@@ -2579,7 +2571,7 @@ class _DebtBreakdownColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPaid = installment.statusEnum == InstallmentStatus.paid;
+    final isPaid = installment.isCompleted;
 
     return Scrollbar(
       child: SingleChildScrollView(
@@ -2594,7 +2586,7 @@ class _DebtBreakdownColumn extends StatelessWidget {
             const SizedBox(height: 16),
             _BreakdownStat(
               label: 'TOTAL AMOUNT',
-              value: currency.format(installment.amount),
+              value: currency.format(installment.totalAmount),
             ),
             const SizedBox(height: 14),
             _BreakdownStat(

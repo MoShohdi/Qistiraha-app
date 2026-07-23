@@ -73,7 +73,9 @@ class DatabaseService {
   }) async {
     if (_uid == null) throw StateError('Not authenticated.');
     final monthsPerPayment = _monthsPerPaymentFor(paymentFrequency);
-    final totalPeriods = monthsPerPayment > 0 ? months ~/ monthsPerPayment : months;
+    final totalPeriods = monthsPerPayment > 0
+        ? months ~/ monthsPerPayment
+        : months;
     final principal = totalAmount - downPayment;
     final perPeriod = totalPeriods > 0
         ? (principal * (1 + interestRate / 100)) / totalPeriods
@@ -109,6 +111,92 @@ class DatabaseService {
   }
 
   // ---------------------------------------------------------------------------
+  // Profile finance (income lives on public.profiles now, not Hive)
+  // ---------------------------------------------------------------------------
+
+  /// Reads the current user's income, salary day, and display name — the
+  /// non-installment inputs the Affordability Engine and sidebar need. Returns
+  /// zero-income defaults if the row is missing or unreadable.
+  static Future<ProfileFinance> profileFinance() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return const ProfileFinance();
+    try {
+      final row = await _client
+          .from('profiles')
+          .select('monthly_income, salary_day, full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (row == null) {
+        return ProfileFinance(
+          name: user.userMetadata?['full_name'] as String? ?? '',
+        );
+      }
+      double toDouble(dynamic v) => v == null
+          ? 0.0
+          : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0.0);
+      return ProfileFinance(
+        monthlyIncome: toDouble(row['monthly_income']),
+        salaryDay: (row['salary_day'] as num?)?.toInt() ?? 1,
+        name:
+            (row['full_name'] as String?) ??
+            (user.userMetadata?['full_name'] as String? ?? ''),
+      );
+    } catch (_) {
+      return const ProfileFinance();
+    }
+  }
+
+  /// Updates the user's income (and optionally salary day) on their profile.
+  static Future<void> updateIncome(
+    double monthlyIncome, {
+    int? salaryDay,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not authenticated.');
+    final patch = <String, dynamic>{'monthly_income': monthlyIncome};
+    if (salaryDay != null) patch['salary_day'] = salaryDay;
+    await _client.from('profiles').update(patch).eq('id', uid);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Payment recording (consumer marks a period paid)
+  // ---------------------------------------------------------------------------
+
+  /// Records a single on-time period payment against [row]: appends the
+  /// per-period amount to `past_payments`, advances `paid_months` and
+  /// `due_date` by one frequency step, stamps `last_paid_at`, and flips
+  /// `status` to `completed` when the final period is paid. No penalties.
+  ///
+  /// Because the caller's dashboard subscribes to [consumerInstallments], the
+  /// updated row streams straight back and the UI reflects it with no refresh.
+  static Future<void> recordPayment(InstallmentRow row) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not authenticated.');
+    if (row.paidPayments >= row.totalPayments) return;
+
+    final newPaidMonths = row.paidMonths + row.monthsPerPayment;
+    final newDueDate = DateTime(
+      row.dueDate.year,
+      row.dueDate.month + row.monthsPerPayment,
+      row.dueDate.day,
+    );
+    final newPast = [...row.pastPayments, row.monthlyPayment];
+    final completed = newPaidMonths >= row.totalMonths;
+
+    await _client
+        .from(_table)
+        .update({
+          'paid_months': newPaidMonths,
+          'paid_amount': row.paidAmount + row.monthlyPayment,
+          'past_payments': newPast,
+          'due_date': newDueDate.toIso8601String().substring(0, 10),
+          'last_paid_at': DateTime.now().toIso8601String(),
+          if (completed) 'status': 'completed',
+        })
+        .eq('id', row.id);
+  }
+
+  // ---------------------------------------------------------------------------
   // Consumer side of the handshake
   // ---------------------------------------------------------------------------
 
@@ -116,11 +204,7 @@ class DatabaseService {
   /// consumer commits to claiming it. Returns null if the row is gone or RLS
   /// hides it (e.g. already claimed by someone else).
   static Future<InstallmentRow?> fetchInstallment(String id) async {
-    final row = await _client
-        .from(_table)
-        .select()
-        .eq('id', id)
-        .maybeSingle();
+    final row = await _client.from(_table).select().eq('id', id).maybeSingle();
     return row == null ? null : InstallmentRow.fromMap(row);
   }
 
@@ -153,6 +237,19 @@ class DatabaseService {
     if (uri.scheme != 'qistiraha' || uri.host != 'installment') return null;
     return uri.pathSegments.isEmpty ? null : uri.pathSegments.first;
   }
+}
+
+/// The non-installment finance inputs (income, salary day, display name) the
+/// dashboard needs, sourced from `public.profiles` now that Hive is gone.
+class ProfileFinance {
+  final double monthlyIncome;
+  final int salaryDay;
+  final String name;
+  const ProfileFinance({
+    this.monthlyIncome = 0,
+    this.salaryDay = 1,
+    this.name = '',
+  });
 }
 
 /// Number of calendar months per payment period for a frequency string —
@@ -233,10 +330,13 @@ class InstallmentRow {
         : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0.0);
     int toInt(dynamic v) =>
         v == null ? 0 : (v is num ? v.toInt() : int.tryParse('$v') ?? 0);
-    DateTime? toDate(dynamic v) =>
-        v == null ? null : DateTime.tryParse('$v');
+    DateTime? toDate(dynamic v) => v == null ? null : DateTime.tryParse('$v');
     List<double> toDoubleList(dynamic v) => v is List
-        ? v.map((e) => e is num ? e.toDouble() : double.tryParse('$e') ?? 0.0).toList()
+        ? v
+              .map(
+                (e) => e is num ? e.toDouble() : double.tryParse('$e') ?? 0.0,
+              )
+              .toList()
         : const [];
 
     return InstallmentRow(

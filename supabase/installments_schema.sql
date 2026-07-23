@@ -114,6 +114,23 @@ create policy "installments: consumer claims pending"
   using (status = 'pending_scan' and consumer_id is null)
   with check (consumer_id = auth.uid() and status = 'active');
 
+-- UPDATE (consumer records payments): after claiming, the consumer owns the
+-- plan and needs to write payment progress to it (paid_months, past_payments,
+-- due_date, last_paid_at, status → completed). This lets them update any row
+-- where they are the consumer.
+--
+-- Integrity note: WITH CHECK can only assert the NEW row's consumer_id, so a
+-- determined consumer could technically also alter contract fields
+-- (total_amount, merchant_id) on their own row. For a beta this is accepted;
+-- to lock it down, replace this policy with a SECURITY DEFINER
+-- `record_payment(uuid)` RPC that mutates only the payment columns.
+drop policy if exists "installments: consumer updates own" on public.installments;
+create policy "installments: consumer updates own"
+  on public.installments for update
+  to authenticated
+  using (consumer_id = auth.uid())
+  with check (consumer_id = auth.uid());
+
 -- DELETE: only the issuing merchant may delete a row they created.
 drop policy if exists "installments: merchant deletes own" on public.installments;
 create policy "installments: merchant deletes own"
