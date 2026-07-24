@@ -3,23 +3,43 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
-import '../models/qist_link_payload.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 
+/// Success screen shown after a merchant generates a Qist-Link. [link] is the
+/// real Supabase deep link (`qistiraha://installment/<id>`) for the freshly
+/// created `pending_scan` row — scanning/tapping it opens the consumer's claim
+/// flow, which reads that row and attaches the consumer's account to it.
 class QistLinkScreen extends StatelessWidget {
-  final QistLinkPayload payload;
+  /// Native deep link (`qistiraha://installment/<id>`) — encoded in the QR for
+  /// in-app scanning.
+  final String link;
 
-  const QistLinkScreen({super.key, required this.payload});
+  /// Web link (`https://<host>/?claim_id=<id>`) — the pasteable/shareable URL
+  /// used for copy + WhatsApp, so a buyer on any device (desktop browser too)
+  /// can open it.
+  final String webLink;
+  final String item;
+  final double price;
+  final int months;
 
-  String get _link => payload.toUri().toString();
+  const QistLinkScreen({
+    super.key,
+    required this.link,
+    required this.webLink,
+    required this.item,
+    required this.price,
+    required this.months,
+  });
+
+  String get _link => link;
 
   Future<void> _shareViaWhatsApp(BuildContext context) async {
     final currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
     final message =
-        'Here is your Qistiraha installment plan for ${payload.item} '
-        '(${currency.format(payload.price)} over ${payload.months} months). '
-        'Click here to add it to your app: $_link';
+        'Here is your Qistiraha installment plan for $item '
+        '(${currency.format(price)} over $months months). '
+        'Click here to add it to your app: $webLink';
 
     // No recipient prefill — the merchant picks the chat; buyer identity
     // is supplied by the consumer's own account when they open the link.
@@ -41,7 +61,7 @@ class QistLinkScreen extends StatelessWidget {
   }
 
   void _copyLink(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: _link));
+    Clipboard.setData(ClipboardData(text: webLink));
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Link copied to clipboard')));
@@ -69,7 +89,7 @@ class QistLinkScreen extends StatelessWidget {
         child: Column(
           children: [
             Text(
-              payload.item,
+              item,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -118,7 +138,7 @@ class QistLinkScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        _link,
+                        webLink,
                         style: TextStyle(color: Colors.grey[700], fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),

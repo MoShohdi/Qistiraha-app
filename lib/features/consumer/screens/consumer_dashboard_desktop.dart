@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/engine/affordability_live.dart';
 import 'package:qistiraha/core/services/database_service.dart';
@@ -8,6 +9,7 @@ import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
 import 'package:qistiraha/features/auth/screens/login_screen_desktop.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
+import 'package:qistiraha/widgets/stream_error_view.dart';
 import 'add_installment_screen.dart';
 import 'add_installment_desktop.dart';
 
@@ -125,6 +127,11 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
   String _name = '';
   bool _profileLoaded = false;
 
+  // Created once — recreating it in build() resubscribed on every rebuild.
+  // Not `final` so [_retry] can rebuild it after an error.
+  Stream<List<InstallmentRow>> _installmentsStream =
+      DatabaseService.consumerInstallments();
+
   @override
   void initState() {
     super.initState();
@@ -132,7 +139,12 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
   }
 
   Future<void> _loadProfile() async {
-    final p = await DatabaseService.profileFinance();
+    ProfileFinance p;
+    try {
+      p = await DatabaseService.profileFinance();
+    } catch (_) {
+      p = const ProfileFinance();
+    }
     if (!mounted) return;
     setState(() {
       _income = p.monthlyIncome;
@@ -140,6 +152,16 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
       _name = p.name;
       _profileLoaded = true;
     });
+  }
+
+  /// Rebuilds the realtime subscription and re-fetches the profile — wired to
+  /// the Retry button shown when the stream errors.
+  void _retry() {
+    setState(() {
+      _profileLoaded = false;
+      _installmentsStream = DatabaseService.consumerInstallments();
+    });
+    _loadProfile();
   }
 
   Future<void> _editIncome() async {
@@ -243,12 +265,11 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<InstallmentRow>>(
-      stream: DatabaseService.consumerInstallments(),
+      stream: _installmentsStream,
       builder: (context, snapshot) {
         final all = snapshot.data ?? const <InstallmentRow>[];
-        final loading =
-            !_profileLoaded ||
-            snapshot.connectionState == ConnectionState.waiting;
+        final hasError = snapshot.hasError;
+        final loading = !_profileLoaded || !snapshot.hasData;
 
         return Scaffold(
           backgroundColor: _kBg,
@@ -273,9 +294,11 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
                 onLogout: () => _logout(context),
               ),
               Expanded(
-                child: loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _buildMainContent(all),
+                child: hasError
+                    ? StreamErrorView(onRetry: _retry)
+                    : (loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : _buildMainContent(all)),
               ),
             ],
           ),
@@ -2235,6 +2258,37 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
   // Held in state so an in-dialog payment can refresh it from Supabase
   // without closing the dialog.
   late InstallmentRow _inst = widget.installment;
+  bool _uploadingReceipt = false;
+
+  Future<void> _refreshInst() async {
+    final updated = await DatabaseService.fetchInstallment(_inst.id);
+    if (updated != null && mounted) setState(() => _inst = updated);
+  }
+
+  Future<void> _pickReceipt() async {
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+      );
+      if (image == null) return;
+      setState(() => _uploadingReceipt = true);
+      final bytes = await image.readAsBytes();
+      await DatabaseService.uploadReceipt(_inst.id, bytes);
+      await _refreshInst();
+    } catch (_) {
+      if (mounted) {
+        showDesktopSnackBar(context, message: 'Could not upload receipt.');
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingReceipt = false);
+    }
+  }
+
+  Future<void> _removeReceipt() async {
+    await DatabaseService.removeReceipt(_inst.id);
+    await _refreshInst();
+  }
 
   /// One node per *payment period*, not per month — a 60-month plan billed
   /// Quarterly yields 20 nodes, not 60. Node status maps to periods too
@@ -2422,6 +2476,9 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
                       canDelete: canDelete,
                       onPay: _pay,
                       onDelete: () {},
+                      uploadingReceipt: _uploadingReceipt,
+                      onPickReceipt: _pickReceipt,
+                      onRemoveReceipt: _removeReceipt,
                     ),
                   ),
                 ],
@@ -2601,6 +2658,9 @@ class _DebtBreakdownColumn extends StatelessWidget {
   final bool canDelete;
   final Future<void> Function() onPay;
   final VoidCallback onDelete;
+  final bool uploadingReceipt;
+  final Future<void> Function() onPickReceipt;
+  final Future<void> Function() onRemoveReceipt;
 
   const _DebtBreakdownColumn({
     required this.installment,
@@ -2609,7 +2669,116 @@ class _DebtBreakdownColumn extends StatelessWidget {
     required this.canDelete,
     required this.onPay,
     required this.onDelete,
+    required this.uploadingReceipt,
+    required this.onPickReceipt,
+    required this.onRemoveReceipt,
   });
+
+  Widget _buildReceiptSection(BuildContext context) {
+    final url = installment.receiptImageUrl;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 18),
+        Text(
+          'WARRANTY & RECEIPT',
+          style: TextStyle(
+            color: Colors.grey[700],
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (uploadingReceipt)
+          const Center(child: CircularProgressIndicator())
+        else if (url == null)
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: OutlinedButton.icon(
+              onPressed: onPickReceipt,
+              icon: const Icon(Icons.upload_file_outlined, size: 18),
+              label: const Text('Upload receipt photo'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _kBrandDark,
+                minimumSize: const Size(double.infinity, 44),
+                side: BorderSide(color: Colors.grey[300]!),
+              ),
+            ),
+          )
+        else
+          Row(
+            children: [
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => showDialog(
+                    context: context,
+                    builder: (context) => Dialog(
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(url),
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      url,
+                      width: 72,
+                      height: 72,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        width: 72,
+                        height: 72,
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.broken_image_outlined),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onPickReceipt,
+                        child: const Text('Replace', style: TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onRemoveReceipt,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                        ),
+                        child: const Text('Remove', style: TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2794,6 +2963,7 @@ class _DebtBreakdownColumn extends StatelessWidget {
                 style: TextStyle(color: Colors.grey[500], fontSize: 11),
               ),
             ],
+            _buildReceiptSection(context),
           ],
         ),
       ),

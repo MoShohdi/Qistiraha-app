@@ -4,6 +4,7 @@ import 'package:qistiraha/core/services/time_service.dart';
 import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/engine/affordability_live.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
+import 'package:qistiraha/widgets/stream_error_view.dart';
 import 'add_installment_screen.dart';
 import 'installment_details_screen.dart';
 
@@ -26,6 +27,13 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _profileLoaded = false;
   List<InstallmentRow> _rows = const [];
 
+  // Create the realtime stream ONCE. Recreating it inside build() (as before)
+  // resubscribed on every rebuild and reset the StreamBuilder to "waiting",
+  // which is why data only appeared after a tab toggle. Not `final` so
+  // [_retry] can rebuild it after an error.
+  Stream<List<InstallmentRow>> _installmentsStream =
+      DatabaseService.consumerInstallments();
+
   // --- What-If Simulator state ---
   final _whatIfCostController = TextEditingController();
   final _whatIfDownPaymentController = TextEditingController();
@@ -42,7 +50,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final p = await DatabaseService.profileFinance();
+    // profileFinance() already swallows its own errors and returns defaults,
+    // but guard here too so _profileLoaded always flips true — otherwise a
+    // hung profile fetch would keep the whole screen on a spinner forever.
+    ProfileFinance p;
+    try {
+      p = await DatabaseService.profileFinance();
+    } catch (_) {
+      p = const ProfileFinance();
+    }
     if (!mounted) return;
     setState(() {
       _income = p.monthlyIncome;
@@ -50,6 +66,16 @@ class _HomeScreenState extends State<HomeScreen> {
       _name = p.name;
       _profileLoaded = true;
     });
+  }
+
+  /// Rebuilds the realtime subscription and re-fetches the profile — wired to
+  /// the Retry button shown when the stream errors.
+  void _retry() {
+    setState(() {
+      _profileLoaded = false;
+      _installmentsStream = DatabaseService.consumerInstallments();
+    });
+    _loadProfile();
   }
 
   void _runSimulation() {
@@ -111,10 +137,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: StreamBuilder<List<InstallmentRow>>(
-        stream: DatabaseService.consumerInstallments(),
+        stream: _installmentsStream,
         builder: (context, snapshot) {
-          if (!_profileLoaded ||
-              snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.hasError) {
+            return StreamErrorView(onRetry: _retry);
+          }
+          if (!_profileLoaded || !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           _rows = snapshot.data ?? const <InstallmentRow>[];

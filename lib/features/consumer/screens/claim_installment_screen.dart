@@ -58,17 +58,24 @@ class _ClaimInstallmentScreenState extends State<ClaimInstallmentScreen> {
 
   Future<void> _confirm() async {
     setState(() => _claiming = true);
+    bool ok;
     try {
-      await DatabaseService.claimInstallment(widget.installmentId);
+      ok = await DatabaseService.claimInstallment(widget.installmentId);
     } catch (_) {
-      if (!mounted) return;
+      ok = false;
+    }
+    if (!mounted) return;
+    if (!ok) {
       setState(() => _claiming = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not claim this installment.')),
+        const SnackBar(
+          content: Text(
+            'Could not claim this installment. It may already be taken.',
+          ),
+        ),
       );
       return;
     }
-    if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const MainNavigation()),
@@ -80,6 +87,20 @@ class _ClaimInstallmentScreenState extends State<ClaimInstallmentScreen> {
         backgroundColor: Colors.green,
       ),
     );
+  }
+
+  /// Declines the offer and cleans up the unclaimed draft in Supabase so it
+  /// doesn't linger. Best-effort — a cleanup failure still closes the screen.
+  Future<void> _decline() async {
+    if (_row != null && _row!.isPending) {
+      try {
+        await DatabaseService.declineInstallment(widget.installmentId);
+      } catch (_) {
+        // Non-fatal: the draft stays, but the user still leaves the screen.
+      }
+    }
+    if (!mounted) return;
+    Navigator.pop(context);
   }
 
   @override
@@ -197,7 +218,7 @@ class _ClaimInstallmentScreenState extends State<ClaimInstallmentScreen> {
           ),
           const SizedBox(height: 12),
           OutlinedButton(
-            onPressed: _claiming ? null : () => Navigator.pop(context),
+            onPressed: _claiming ? null : _decline,
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(

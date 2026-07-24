@@ -1,4 +1,11 @@
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// Production origin used to build shareable web claim links when the merchant
+/// is NOT running the web app (native has no browser origin to read). On web
+/// the live origin (`Uri.base.origin`) is used instead, so this only matters
+/// for links generated from the mobile app. Set it to your deployed web host.
+const String kWebAppOrigin = 'https://qistiraha.app';
 
 /// Live, Supabase-backed access to `public.installments`.
 ///
@@ -27,31 +34,145 @@ class DatabaseService {
 
   /// Every installment this merchant has generated, newest activity last.
   /// Emits `[]` (rather than erroring) when signed out.
+  ///
+  /// Each emission is enriched with the real buyer name — but only for claimed
+  /// (`active`) rows, and sourced from the [`merchant_customer_names`] RPC that
+  /// returns nothing but the name (never income or any other profile field).
+  /// `asyncMap` keeps the name merge in step with every realtime update.
   static Stream<List<InstallmentRow>> merchantInstallments() {
     final uid = _uid;
     if (uid == null) return Stream.value(const []);
-    return _client
+    final rows = _client
         .from(_table)
         .stream(primaryKey: ['id'])
         .eq('merchant_id', uid)
-        .order('created_at')
-        .map(_mapRows);
+        .order('created_at');
+    return _seeded(
+      rows.asyncMap((raw) async {
+        final names = await _merchantCustomerNames();
+        return raw.map((m) {
+          final name = names[m['id']];
+          return InstallmentRow.fromMap(
+            name == null ? m : {...m, 'customer_name': name},
+          );
+        }).toList();
+      }),
+    );
+  }
+
+  /// Calls the SECURITY DEFINER `merchant_customer_names` RPC and returns a
+  /// map of installment id → buyer name for the current merchant's claimed
+  /// rows. Fails soft (empty map) so a name-lookup hiccup never breaks the
+  /// dashboard stream — rows just fall back to the generic label.
+  static Future<Map<String, String>> _merchantCustomerNames() async {
+    try {
+      final data = await _client.rpc('merchant_customer_names');
+      final map = <String, String>{};
+      if (data is List) {
+        for (final row in data) {
+          if (row is Map) {
+            final id = row['installment_id'];
+            final name = row['customer_name'];
+            if (id is String && name is String && name.isNotEmpty) {
+              map[id] = name;
+            }
+          }
+        }
+      }
+      return map;
+    } catch (_) {
+      return const {};
+    }
   }
 
   /// Every installment this consumer has claimed.
   static Stream<List<InstallmentRow>> consumerInstallments() {
     final uid = _uid;
     if (uid == null) return Stream.value(const []);
-    return _client
-        .from(_table)
-        .stream(primaryKey: ['id'])
-        .eq('consumer_id', uid)
-        .order('created_at')
-        .map(_mapRows);
+    return _seeded(
+      _client
+          .from(_table)
+          .stream(primaryKey: ['id'])
+          .eq('consumer_id', uid)
+          .order('created_at')
+          .map(_mapRows),
+    );
+  }
+
+  /// Prepends an immediate empty snapshot so a `StreamBuilder` has data on its
+  /// very first frame. This is the deliberate "fallback state" that keeps a
+  /// dropped/slow realtime channel from freezing the UI on an endless spinner:
+  /// worst case the user sees the normal empty state until the first real
+  /// snapshot (or an error) arrives — never a hung loader. Errors from the
+  /// underlying channel still propagate through, so `snapshot.hasError` can
+  /// drive a retry affordance.
+  static Stream<List<InstallmentRow>> _seeded(
+    Stream<List<InstallmentRow>> source,
+  ) async* {
+    yield const <InstallmentRow>[];
+    yield* source;
   }
 
   static List<InstallmentRow> _mapRows(List<Map<String, dynamic>> rows) =>
       rows.map(InstallmentRow.fromMap).toList();
+
+  // ---------------------------------------------------------------------------
+  // Merchant storefront (public.businesses)
+  // ---------------------------------------------------------------------------
+
+  /// The current merchant's storefront row, or null if signed out. Auto-creates
+  /// a default storefront (named from the profile) the first time a merchant
+  /// with no `businesses` row asks for it — this is what turns the old
+  /// "No merchant account found" dead-end into a working dashboard for anyone
+  /// who onboarded before storefronts were provisioned on sign-up.
+  static Future<Business?> merchantBusiness() async {
+    final uid = _uid;
+    if (uid == null) return null;
+    final existing = await _client
+        .from('businesses')
+        .select()
+        .eq('owner_id', uid)
+        .order('created_at')
+        .limit(1)
+        .maybeSingle();
+    if (existing != null) return Business.fromMap(existing);
+    return _createBusinessForCurrentUser();
+  }
+
+  /// Ensures a storefront row exists for the current merchant, creating one
+  /// from their profile name if absent. Safe to call on every merchant sign-in
+  /// / role selection; returns the (possibly newly created) row.
+  static Future<Business?> ensureBusiness({String? businessName}) async {
+    final uid = _uid;
+    if (uid == null) return null;
+    final existing = await _client
+        .from('businesses')
+        .select()
+        .eq('owner_id', uid)
+        .order('created_at')
+        .limit(1)
+        .maybeSingle();
+    if (existing != null) return Business.fromMap(existing);
+    return _createBusinessForCurrentUser(businessName: businessName);
+  }
+
+  static Future<Business?> _createBusinessForCurrentUser({
+    String? businessName,
+  }) async {
+    final uid = _uid;
+    if (uid == null) return null;
+    var name = businessName?.trim() ?? '';
+    if (name.isEmpty) {
+      final me = await profileFinance();
+      name = me.name.trim().isEmpty ? 'My Store' : "${me.name}'s Store";
+    }
+    final row = await _client
+        .from('businesses')
+        .insert({'owner_id': uid, 'business_name': name})
+        .select()
+        .single();
+    return Business.fromMap(row);
+  }
 
   // ---------------------------------------------------------------------------
   // Merchant side of the handshake
@@ -270,14 +391,35 @@ class DatabaseService {
   /// `consumer_id = auth.uid()` and `status = 'active'`. The heavy lifting is
   /// the RLS "consumer claims pending" policy — this update only succeeds if
   /// the row is still `pending_scan` and unclaimed, and only lets the caller
-  /// set themselves as the consumer. A row that was already claimed simply
-  /// updates nothing.
-  static Future<void> claimInstallment(String id) async {
+  /// set themselves as the consumer.
+  ///
+  /// Returns `true` when a row was actually updated, `false` when nothing
+  /// matched — the row was already claimed, already gone, or hidden by RLS.
+  /// The `.eq('status', 'pending_scan')` guard plus `.select()` make that
+  /// outcome observable instead of a silent no-op.
+  static Future<bool> claimInstallment(String id) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not authenticated.');
+    final updated = await _client
+        .from(_table)
+        .update({'consumer_id': uid, 'status': 'active'})
+        .eq('id', id)
+        .eq('status', 'pending_scan')
+        .select();
+    return updated.isNotEmpty;
+  }
+
+  /// Declines a shared installment: deletes the still-unclaimed `pending_scan`
+  /// draft so abandoned links don't accumulate. Gated to pending rows (the
+  /// `.eq` guard plus the "decline pending" RLS policy), so this can never
+  /// remove a live/claimed plan. No-op if the row is already claimed or gone.
+  static Future<void> declineInstallment(String id) async {
     if (_uid == null) throw StateError('Not authenticated.');
     await _client
         .from(_table)
-        .update({'consumer_id': _uid, 'status': 'active'})
-        .eq('id', id);
+        .delete()
+        .eq('id', id)
+        .eq('status', 'pending_scan');
   }
 
   /// Deletes an installment row. RLS lets this succeed only for the issuing
@@ -308,6 +450,51 @@ class DatabaseService {
   }
 
   // ---------------------------------------------------------------------------
+  // Receipt / warranty images (Supabase Storage bucket 'receipts')
+  // ---------------------------------------------------------------------------
+
+  static const String _receiptsBucket = 'receipts';
+
+  /// Uploads [bytes] as the receipt image for [installmentId] to
+  /// `receipts/<uid>/<installmentId>.jpg`, writes the public URL onto the row,
+  /// and returns it. Works on web and mobile (byte upload). Cache-busts the
+  /// URL so a re-upload actually re-renders.
+  static Future<String> uploadReceipt(
+    String installmentId,
+    Uint8List bytes, {
+    String contentType = 'image/jpeg',
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not authenticated.');
+    final path = '$uid/$installmentId.jpg';
+    await _client.storage
+        .from(_receiptsBucket)
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: contentType),
+        );
+    final base = _client.storage.from(_receiptsBucket).getPublicUrl(path);
+    final url = '$base?t=${DateTime.now().millisecondsSinceEpoch}';
+    await _client
+        .from(_table)
+        .update({'receipt_image_url': url})
+        .eq('id', installmentId);
+    return url;
+  }
+
+  /// Removes the stored receipt image and clears the column.
+  static Future<void> removeReceipt(String installmentId) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not authenticated.');
+    await _client.storage.from(_receiptsBucket).remove(['$uid/$installmentId.jpg']);
+    await _client
+        .from(_table)
+        .update({'receipt_image_url': null})
+        .eq('id', installmentId);
+  }
+
+  // ---------------------------------------------------------------------------
   // Deep link
   // ---------------------------------------------------------------------------
 
@@ -315,6 +502,19 @@ class DatabaseService {
   /// `qistiraha://installment/<id>`. Parsed back out by `DeepLinkService`.
   static String deepLinkFor(String installmentId) =>
       'qistiraha://installment/$installmentId';
+
+  /// The web equivalent of [deepLinkFor]: `https://<host>/?claim_id=<id>` —
+  /// pasteable straight into a desktop browser (handled at boot in `main.dart`
+  /// / `DeepLinkService.claimIdFromUri`). On the web app the live origin is
+  /// used; from the native app it falls back to [kWebAppOrigin].
+  static String webClaimLinkFor(String installmentId) =>
+      '${_webOrigin()}/?claim_id=$installmentId';
+
+  static String _webOrigin() {
+    final base = Uri.base;
+    if (base.scheme == 'http' || base.scheme == 'https') return base.origin;
+    return kWebAppOrigin;
+  }
 
   /// Extracts the installment id from a `qistiraha://installment/<id>` URI,
   /// or null if [uri] is not one of those links.
@@ -335,6 +535,29 @@ class ProfileFinance {
     this.salaryDay = 1,
     this.name = '',
   });
+}
+
+/// A merchant's storefront row from `public.businesses`. Replaces the legacy
+/// Hive `BusinessAccount` on the merchant dashboards.
+class Business {
+  final String id;
+  final String ownerId;
+  final String name;
+  final String? category;
+
+  const Business({
+    required this.id,
+    required this.ownerId,
+    required this.name,
+    required this.category,
+  });
+
+  factory Business.fromMap(Map<String, dynamic> m) => Business(
+    id: m['id'] as String,
+    ownerId: m['owner_id'] as String,
+    name: (m['business_name'] as String?) ?? 'My Store',
+    category: m['category'] as String?,
+  );
 }
 
 /// Number of calendar months per payment period for a frequency string —
@@ -385,6 +608,8 @@ class InstallmentRow {
   final List<double> pastPayments;
   final DateTime? lastPaidAt;
   final String status;
+  final String? receiptImageUrl;
+  final String? customerName; // buyer's display name (denormalized)
 
   const InstallmentRow({
     required this.id,
@@ -407,6 +632,8 @@ class InstallmentRow {
     required this.pastPayments,
     required this.lastPaidAt,
     required this.status,
+    required this.receiptImageUrl,
+    required this.customerName,
   });
 
   factory InstallmentRow.fromMap(Map<String, dynamic> m) {
@@ -445,6 +672,8 @@ class InstallmentRow {
       pastPayments: toDoubleList(m['past_payments']),
       lastPaidAt: toDate(m['last_paid_at']),
       status: (m['status'] as String?) ?? 'pending_scan',
+      receiptImageUrl: m['receipt_image_url'] as String?,
+      customerName: m['customer_name'] as String?,
     );
   }
 

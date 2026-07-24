@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/services/time_service.dart';
 import 'package:lottie/lottie.dart';
@@ -21,7 +22,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     decimalDigits: 2,
   );
   // Held in state so mutations (payment, re-plan) can refresh it from Supabase.
-  late InstallmentRow _inst = _inst;
+  late InstallmentRow _inst = widget.installment;
   bool _isByDate = true;
   DateTime? _desiredPayoffDate;
   double _newMonthlyPayment = 0.0;
@@ -30,6 +31,92 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
   Future<void> _refresh() async {
     final updated = await DatabaseService.fetchInstallment(_inst.id);
     if (updated != null && mounted) setState(() => _inst = updated);
+  }
+
+  bool _uploadingReceipt = false;
+
+  Future<void> _pickAndUploadReceipt(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: source, imageQuality: 80);
+      if (image == null) return;
+      setState(() => _uploadingReceipt = true);
+      final bytes = await image.readAsBytes();
+      await DatabaseService.uploadReceipt(_inst.id, bytes);
+      await _refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload receipt: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingReceipt = false);
+    }
+  }
+
+  void _showReceiptSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Text(
+                'Add Receipt Photo',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadReceipt(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadReceipt(ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _removeReceipt() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Receipt'),
+        content: const Text('Remove this receipt image? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await DatabaseService.removeReceipt(_inst.id);
+    await _refresh();
   }
 
   void _applyNewPlan() async {
@@ -159,6 +246,8 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             _buildDebtPaidCard(),
             const SizedBox(height: 16),
             _buildMonthlyPaymentCard(),
+            const SizedBox(height: 16),
+            _buildReceiptCard(),
             const SizedBox(height: 24),
             _buildPaymentHistory(),
             const SizedBox(height: 24),
@@ -562,6 +651,189 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
       return;
     }
     await _refresh();
+  }
+
+  Widget _buildReceiptCard() {
+    final url = _inst.receiptImageUrl;
+    return CardPopIn(
+      id: 'details-receipt-card',
+      builder: (context, animate) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'WARRANTY & RECEIPT',
+              style: TextStyle(
+                color: Colors.black87,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_uploadingReceipt)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (url == null)
+              GestureDetector(
+                onTap: _showReceiptSourceDialog,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!, width: 1.5),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.camera_alt_outlined,
+                        color: Colors.grey[500],
+                        size: 32,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap to add receipt photo',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      url,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        width: 80,
+                        height: 80,
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.broken_image_outlined),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Receipt saved',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => showDialog(
+                                  context: context,
+                                  builder: (context) => Dialog(
+                                    insetPadding: const EdgeInsets.all(16),
+                                    child: Stack(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(16),
+                                          child: Image.network(url),
+                                        ),
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: IconButton(
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: Colors.white,
+                                              shadows: [
+                                                Shadow(
+                                                  color: Colors.black45,
+                                                  blurRadius: 4,
+                                                ),
+                                              ],
+                                            ),
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.fullscreen,
+                                  size: 16,
+                                  color: Colors.black,
+                                ),
+                                label: const Text(
+                                  'View',
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                  side: BorderSide(color: Colors.grey[300]!),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _removeReceipt,
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  size: 16,
+                                  color: Colors.red,
+                                ),
+                                label: const Text(
+                                  'Remove',
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                  side: const BorderSide(color: Colors.red),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ).popInIf(animate, 0),
+      ),
+    );
   }
 
   Widget _buildPaymentHistory() {

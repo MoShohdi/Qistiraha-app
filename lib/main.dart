@@ -9,6 +9,7 @@ import 'features/consumer/screens/insights_screen.dart';
 import 'features/consumer/screens/history_screen.dart';
 import 'features/consumer/screens/profile_screen.dart';
 import 'features/consumer/screens/consumer_dashboard_desktop.dart';
+import 'features/consumer/screens/claim_installment_screen.dart';
 
 import 'features/auth/services/auth_service.dart';
 import 'features/auth/screens/welcome_screen.dart';
@@ -40,7 +41,16 @@ void main() async {
   } catch (_) {
     destination = AuthDestination.loggedOut;
   }
-  runApp(QistirahaApp(initialDestination: destination));
+  // Web: a merchant's link is opened as an ordinary browser URL
+  // (`?claim_id=…` or `#/claim?id=…`), which app_links can't surface — so
+  // pick it up from the boot URL and route to the claim screen after mount.
+  final initialClaimId = DeepLinkService.claimIdFromCurrentUrl();
+  runApp(
+    QistirahaApp(
+      initialDestination: destination,
+      initialClaimId: initialClaimId,
+    ),
+  );
 }
 
 /// The single place that turns an [AuthDestination] into the screen pair
@@ -73,7 +83,12 @@ Widget destinationScreen(AuthDestination destination) {
 
 class QistirahaApp extends StatefulWidget {
   final AuthDestination initialDestination;
-  const QistirahaApp({super.key, required this.initialDestination});
+  final String? initialClaimId;
+  const QistirahaApp({
+    super.key,
+    required this.initialDestination,
+    this.initialClaimId,
+  });
 
   @override
   State<QistirahaApp> createState() => _QistirahaAppState();
@@ -87,6 +102,19 @@ class _QistirahaAppState extends State<QistirahaApp> {
     super.initState();
     DeepLinkService.init(navigatorKey);
     _authSub = AuthService.authStateChanges.listen(_onAuthStateChange);
+
+    // If the app was opened via a web claim URL, drop the user onto the claim
+    // screen once the navigator is mounted (post-first-frame).
+    final claimId = widget.initialClaimId;
+    if (claimId != null && claimId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => ClaimInstallmentScreen(installmentId: claimId),
+          ),
+        );
+      });
+    }
   }
 
   /// `onAuthStateChange` immediately replays the current session as its

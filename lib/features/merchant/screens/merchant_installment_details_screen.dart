@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:qistiraha/core/services/hive_service.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
+import 'package:qistiraha/features/merchant/widgets/installment_row_compat.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 const _kBg = Color(0xFFF8F9FA);
@@ -13,7 +13,7 @@ const _kBg = Color(0xFFF8F9FA);
 /// buyers via WhatsApp, but cannot edit anything here — the contract
 /// belongs to the consumer, who manages payments from their own app.
 class MerchantInstallmentDetailsScreen extends StatelessWidget {
-  final Installment installment;
+  final InstallmentRow installment;
 
   const MerchantInstallmentDetailsScreen({
     super.key,
@@ -21,9 +21,9 @@ class MerchantInstallmentDetailsScreen extends StatelessWidget {
   });
 
   /// Builds one row per completed payment, newest first. Amounts come from
-  /// [Installment.pastPayments] when available (falling back to the plan's
-  /// standard [Installment.monthlyPayment] for older records that predate
-  /// that field); dates are approximated backward from [Installment.dueDate]
+  /// [InstallmentRow.pastPayments] when available (falling back to the plan's
+  /// standard [InstallmentRow.monthlyPayment] for older records that predate
+  /// that field); dates are approximated backward from [InstallmentRow.dueDate]
   /// in payment-period increments, since the model only stores an exact
   /// timestamp for the most recent payment.
   List<_PaymentHistoryEntry> _paymentHistory() {
@@ -47,18 +47,11 @@ class MerchantInstallmentDetailsScreen extends StatelessWidget {
     return entries;
   }
 
+  /// Opens WhatsApp with a pre-filled reminder for the merchant to send.
+  /// There's no recipient prefill — the account-based handshake doesn't
+  /// capture a phone number, so (exactly like the "Share via WhatsApp" link
+  /// on the portal) the merchant picks the chat and sends the message.
   Future<void> _sendWhatsAppReminder(BuildContext context) async {
-    final phone = installment.customerPhone ?? '';
-    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No phone number on file for this customer.'),
-        ),
-      );
-      return;
-    }
-
     final currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
     final buyerName = installment.customerName ?? 'there';
     final message =
@@ -68,7 +61,7 @@ class MerchantInstallmentDetailsScreen extends StatelessWidget {
         '${installment.itemDescription} is currently due.';
 
     final whatsappUri = Uri.parse(
-      'https://wa.me/$digits?text=${Uri.encodeComponent(message)}',
+      'https://wa.me/?text=${Uri.encodeComponent(message)}',
     );
 
     final launched = await launchUrl(
@@ -112,15 +105,9 @@ class MerchantInstallmentDetailsScreen extends StatelessWidget {
 
     if (confirm != true) return;
 
-    final businessBox = HiveService.getBusinessBox();
-    for (final business in businessBox.values) {
-      if (business.id == installment.merchantId) {
-        business.sentQists?.remove(installment);
-        await business.save();
-        break;
-      }
-    }
-    await installment.delete();
+    // RLS lets the issuing merchant delete their own row. Once gone, both the
+    // merchant's and the consumer's realtime streams re-emit without it.
+    await DatabaseService.deleteInstallment(installment.id);
 
     if (context.mounted) {
       Navigator.pop(context);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
+import 'package:qistiraha/widgets/stream_error_view.dart';
 import 'installment_details_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -14,6 +15,15 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   String _sortBy = 'urgency'; // default
   String _filter = 'All'; // 'All', 'Everyday', 'Assets'
+
+  // Created once — see home_screen for why (avoids resubscribe-on-rebuild).
+  // Not `final` so [_retry] can rebuild it after an error.
+  Stream<List<InstallmentRow>> _installmentsStream =
+      DatabaseService.consumerInstallments();
+
+  void _retry() => setState(
+    () => _installmentsStream = DatabaseService.consumerInstallments(),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -66,9 +76,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ],
       ),
       body: StreamBuilder<List<InstallmentRow>>(
-        stream: DatabaseService.consumerInstallments(),
+        stream: _installmentsStream,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.hasError) {
+            return StreamErrorView(onRetry: _retry);
+          }
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           final rows = snapshot.data ?? const <InstallmentRow>[];

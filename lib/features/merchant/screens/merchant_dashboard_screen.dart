@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:qistiraha/core/services/hive_service.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
-import 'package:qistiraha/features/auth/models/business_account.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
+import 'package:qistiraha/features/merchant/widgets/installment_row_compat.dart';
 import 'package:qistiraha/features/merchant/widgets/merchant_plan_row.dart';
 import 'merchant_customer_profile_screen.dart';
 import 'merchant_insights_screen.dart';
@@ -28,22 +26,36 @@ class MerchantDashboardScreen extends StatefulWidget {
 class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
   final _currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
 
+  // Cached once so the realtime subscription and the storefront lookup aren't
+  // recreated on every rebuild (which would flap the StreamBuilder back to a
+  // loading state and refetch the business each frame).
+  late final Stream<List<InstallmentRow>> _plansStream =
+      DatabaseService.merchantInstallments();
+  late final Future<Business?> _businessFuture =
+      DatabaseService.merchantBusiness();
+
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 4,
-      child: ValueListenableBuilder(
-        valueListenable: HiveService.getBusinessBox().listenable(),
-        builder: (context, Box<BusinessAccount> businessBox, _) {
-          if (businessBox.isEmpty) {
-            return const Scaffold(
-              backgroundColor: _kBg,
-              body: Center(child: Text('No merchant account found.')),
-            );
-          }
-          final business = businessBox.values.first;
+    return FutureBuilder<Business?>(
+      future: _businessFuture,
+      builder: (context, businessSnap) {
+        if (businessSnap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: _kBg,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final business = businessSnap.data;
+        if (business == null) {
+          return const Scaffold(
+            backgroundColor: _kBg,
+            body: Center(child: Text('No merchant account found.')),
+          );
+        }
 
-          return Scaffold(
+        return DefaultTabController(
+          length: 4,
+          child: Scaffold(
             backgroundColor: _kBg,
             appBar: AppBar(
               backgroundColor: _kBg,
@@ -71,7 +83,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          business.businessName,
+                          business.name,
                           style: const TextStyle(
                             color: Colors.black,
                             fontWeight: FontWeight.bold,
@@ -80,7 +92,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          business.category,
+                          business.category ?? 'Merchant',
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 12,
@@ -121,13 +133,10 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                 ],
               ),
             ),
-            body: ValueListenableBuilder(
-              valueListenable: HiveService.getInstallmentBox().listenable(),
-              builder: (context, Box<Installment> installmentBox, _) {
-                final List<Installment> plans = installmentBox.values
-                    .where((i) => i.merchantId == business.id)
-                    .toList();
-
+            body: StreamBuilder<List<InstallmentRow>>(
+              stream: _plansStream,
+              builder: (context, snapshot) {
+                final plans = snapshot.data ?? const <InstallmentRow>[];
                 return TabBarView(
                   children: [
                     _OverviewTab(plans: plans, currency: _currency),
@@ -139,9 +148,9 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               },
             ),
             bottomNavigationBar: _GeneratePaymentLinkDock(business: business),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -152,7 +161,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
 /// reserve real layout space for it, so every tab's list naturally stops
 /// above it instead of ever being obscured.
 class _GeneratePaymentLinkDock extends StatelessWidget {
-  final BusinessAccount business;
+  final Business business;
   const _GeneratePaymentLinkDock({required this.business});
 
   @override
@@ -206,7 +215,7 @@ class _GeneratePaymentLinkDock extends StatelessWidget {
 // Tab 1: Overview
 // ---------------------------------------------------------------------------
 class _OverviewTab extends StatelessWidget {
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   final NumberFormat currency;
   const _OverviewTab({required this.plans, required this.currency});
 
@@ -346,7 +355,7 @@ class _StatCard extends StatelessWidget {
 }
 
 class _UpcomingTile extends StatelessWidget {
-  final Installment installment;
+  final InstallmentRow installment;
   final NumberFormat currency;
   const _UpcomingTile({required this.installment, required this.currency});
 
@@ -442,7 +451,7 @@ class _UpcomingTile extends StatelessWidget {
 class _CustomerSummary {
   final String key;
   final String name;
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   _CustomerSummary({
     required this.key,
     required this.name,
@@ -463,12 +472,12 @@ class _CustomerSummary {
 }
 
 class _CustomersTab extends StatelessWidget {
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   final NumberFormat currency;
   const _CustomersTab({required this.plans, required this.currency});
 
   List<_CustomerSummary> _groupByCustomer() {
-    final Map<String, List<Installment>> grouped = {};
+    final Map<String, List<InstallmentRow>> grouped = {};
     for (final p in plans) {
       final key = (p.customerPhone?.isNotEmpty == true)
           ? p.customerPhone!
@@ -605,7 +614,7 @@ class _CustomersTab extends StatelessWidget {
 enum _StatusFilter { all, overdue, pending, paid }
 
 class _ActiveInstallmentsTab extends StatefulWidget {
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   final NumberFormat currency;
   const _ActiveInstallmentsTab({required this.plans, required this.currency});
 

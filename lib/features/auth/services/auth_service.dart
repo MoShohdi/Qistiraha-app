@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/user_role.dart';
+import '../../../core/services/database_service.dart';
 
 /// Where the app should land right now: not authenticated, authenticated
 /// but yet to pick Consumer/Merchant, or ready for a specific dashboard.
@@ -93,7 +94,9 @@ class AuthService {
   static Future<void> signOut() => _client.auth.signOut();
 
   /// Persists the chosen role on `profiles`. Called exactly once per
-  /// identity, from the Role Picker.
+  /// identity, from the Role Picker. When the user picks Merchant, this also
+  /// provisions their `businesses` storefront row so the merchant dashboard
+  /// has data to read immediately (no more "No merchant account found").
   static Future<void> completeRole(UserRole role) async {
     final user = currentUser;
     if (user == null) throw StateError('No authenticated user.');
@@ -101,6 +104,9 @@ class AuthService {
         .from('profiles')
         .update({'role': role.raw})
         .eq('id', user.id);
+    if (role == UserRole.merchant) {
+      await DatabaseService.ensureBusiness();
+    }
   }
 
   /// The single place that decides what the app should show for the current

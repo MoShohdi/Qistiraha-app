@@ -30,7 +30,8 @@ class DeepLinkService {
   }
 
   static void _handle(Uri uri, GlobalKey<NavigatorState> navigatorKey) {
-    final installmentId = DatabaseService.installmentIdFromUri(uri);
+    final installmentId =
+        DatabaseService.installmentIdFromUri(uri) ?? claimIdFromUri(uri);
     if (installmentId == null) return; // not an installment link — ignore
 
     navigatorKey.currentState?.push(
@@ -38,6 +39,30 @@ class DeepLinkService {
         builder: (_) => ClaimInstallmentScreen(installmentId: installmentId),
       ),
     );
+  }
+
+  /// The claim id embedded in the *current page URL* — used on web, where a
+  /// merchant's link is opened as an ordinary browser URL (custom `qistiraha://`
+  /// schemes don't apply). Called once at boot from `main()`.
+  static String? claimIdFromCurrentUrl() => claimIdFromUri(Uri.base);
+
+  /// Extracts a claim/installment id from a web URL, supporting both:
+  ///   * a query param — `?claim_id=<id>` (or `?installment=<id>`), and
+  ///   * a hash route  — `#/claim?id=<id>` (or `#/claim?claim_id=<id>`).
+  /// Returns null if neither is present. Safe on native (Uri.base carries no
+  /// such params there), so callers don't need a `kIsWeb` guard.
+  static String? claimIdFromUri(Uri uri) {
+    final direct =
+        uri.queryParameters['claim_id'] ?? uri.queryParameters['installment'];
+    if (direct != null && direct.isNotEmpty) return direct;
+
+    final fragment = uri.fragment;
+    if (fragment.isNotEmpty) {
+      final f = Uri.tryParse(fragment);
+      final id = f?.queryParameters['id'] ?? f?.queryParameters['claim_id'];
+      if (id != null && id.isNotEmpty) return id;
+    }
+    return null;
   }
 
   static void dispose() {

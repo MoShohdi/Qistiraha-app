@@ -5,6 +5,7 @@ import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/services/time_service.dart';
 import 'package:qistiraha/core/engine/affordability_live.dart';
 import '../../../widgets/branded_bar_chart_card.dart';
+import 'package:qistiraha/widgets/stream_error_view.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 
 // ---------------------------------------------------------------------------
@@ -66,6 +67,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
   int _salaryDay = 1;
   bool _profileLoaded = false;
 
+  // Created once — see home_screen for why (avoids resubscribe-on-rebuild).
+  // Not `final` so [_retry] can rebuild it after an error.
+  Stream<List<InstallmentRow>> _installmentsStream =
+      DatabaseService.consumerInstallments();
+
   @override
   void initState() {
     super.initState();
@@ -73,13 +79,28 @@ class _InsightsScreenState extends State<InsightsScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final p = await DatabaseService.profileFinance();
+    ProfileFinance p;
+    try {
+      p = await DatabaseService.profileFinance();
+    } catch (_) {
+      p = const ProfileFinance();
+    }
     if (!mounted) return;
     setState(() {
       _income = p.monthlyIncome;
       _salaryDay = p.salaryDay;
       _profileLoaded = true;
     });
+  }
+
+  /// Rebuilds the realtime subscription and re-fetches the profile — wired to
+  /// the Retry button shown when the stream errors.
+  void _retry() {
+    setState(() {
+      _profileLoaded = false;
+      _installmentsStream = DatabaseService.consumerInstallments();
+    });
+    _loadProfile();
   }
 
   Future<void> _editIncome() async {
@@ -127,10 +148,12 @@ class _InsightsScreenState extends State<InsightsScreen> {
         ),
       ),
       body: StreamBuilder<List<InstallmentRow>>(
-        stream: DatabaseService.consumerInstallments(),
+        stream: _installmentsStream,
         builder: (context, snapshot) {
-          if (!_profileLoaded ||
-              snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.hasError) {
+            return StreamErrorView(onRetry: _retry);
+          }
+          if (!_profileLoaded || !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           final installments = snapshot.data ?? const <InstallmentRow>[];

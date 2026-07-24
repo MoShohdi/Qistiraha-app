@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:qistiraha/core/services/hive_service.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/utils/responsive_layout.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
+import 'package:qistiraha/features/merchant/widgets/installment_row_compat.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 
@@ -21,7 +21,7 @@ const _kBrand = Color(0xFF99AFD7);
 /// the parent master-detail view can clear its selection — there's no route
 /// to pop here, this widget lives directly in the detail pane.
 class MerchantInstallmentDetailsDesktop extends StatefulWidget {
-  final Installment installment;
+  final InstallmentRow installment;
   final VoidCallback onCancelled;
 
   const MerchantInstallmentDetailsDesktop({
@@ -39,7 +39,7 @@ class _MerchantInstallmentDetailsDesktopState
     extends State<MerchantInstallmentDetailsDesktop> {
   final _scrollController = ScrollController();
 
-  Installment get _inst => widget.installment;
+  InstallmentRow get _inst => widget.installment;
 
   @override
   void dispose() {
@@ -48,9 +48,9 @@ class _MerchantInstallmentDetailsDesktopState
   }
 
   /// Builds one row per completed payment, newest first. Amounts come from
-  /// [Installment.pastPayments] when available (falling back to the plan's
-  /// standard [Installment.monthlyPayment] for older records that predate
-  /// that field); dates are approximated backward from [Installment.dueDate]
+  /// [InstallmentRow.pastPayments] when available (falling back to the plan's
+  /// standard [InstallmentRow.monthlyPayment] for older records that predate
+  /// that field); dates are approximated backward from [InstallmentRow.dueDate]
   /// in payment-period increments, since the model only stores an exact
   /// timestamp for the most recent payment.
   List<_PaymentHistoryEntry> _paymentHistory() {
@@ -74,17 +74,10 @@ class _MerchantInstallmentDetailsDesktopState
     return entries;
   }
 
+  /// Opens WhatsApp with a pre-filled reminder for the merchant to send.
+  /// No recipient prefill — the account-based handshake carries no phone
+  /// number, so the merchant picks the chat (same as the portal's share link).
   Future<void> _sendWhatsAppReminder(BuildContext context) async {
-    final phone = _inst.customerPhone ?? '';
-    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.isEmpty) {
-      showDesktopSnackBar(
-        context,
-        message: 'No phone number on file for this customer.',
-      );
-      return;
-    }
-
     final currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
     final buyerName = _inst.customerName ?? 'there';
     final message =
@@ -94,7 +87,7 @@ class _MerchantInstallmentDetailsDesktopState
         '${_inst.itemDescription} is currently due.';
 
     final whatsappUri = Uri.parse(
-      'https://wa.me/$digits?text=${Uri.encodeComponent(message)}',
+      'https://wa.me/?text=${Uri.encodeComponent(message)}',
     );
 
     final launched = await launchUrl(
@@ -135,15 +128,9 @@ class _MerchantInstallmentDetailsDesktopState
 
     if (confirm != true) return;
 
-    final businessBox = HiveService.getBusinessBox();
-    for (final business in businessBox.values) {
-      if (business.id == _inst.merchantId) {
-        business.sentQists?.remove(_inst);
-        await business.save();
-        break;
-      }
-    }
-    await _inst.delete();
+    // RLS lets the issuing merchant delete their own row. Once gone, both the
+    // merchant's and the consumer's realtime streams re-emit without it.
+    await DatabaseService.deleteInstallment(_inst.id);
 
     if (context.mounted) {
       showDesktopSnackBar(context, message: 'Contract cancelled');
