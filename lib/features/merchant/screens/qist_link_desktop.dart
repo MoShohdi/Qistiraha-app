@@ -36,7 +36,10 @@ class QistLinkDesktopScreen extends StatelessWidget {
     required this.months,
   });
 
-  String get _link => link;
+  /// The QR MUST encode the native custom scheme (`qistiraha://installment/…`)
+  /// so scanning it opens the app directly, not the browser. The https web
+  /// link is used only for the Copy and WhatsApp-share buttons.
+  String get _nativeQrLink => link;
 
   Future<void> _shareViaWhatsApp(BuildContext context) async {
     final currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
@@ -152,7 +155,7 @@ class QistLinkDesktopScreen extends StatelessWidget {
               width: 240,
               height: 240,
               child: QrImageView(
-                data: _link,
+                data: _nativeQrLink,
                 version: QrVersions.auto,
                 size: 240.0,
                 backgroundColor: Colors.white,

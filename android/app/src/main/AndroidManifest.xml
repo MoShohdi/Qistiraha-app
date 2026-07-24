@@ -24,9 +24,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Qist-Link deep link: qistiraha://pay?merchantId=...&planId=...
-                 Opened when a consumer scans a merchant's QR code or taps
-                 their WhatsApp share link. -->
+            <!-- Qist-Link claim deep link: qistiraha://installment/<id> — the
+                 scheme the QR code encodes today. Opened when a consumer scans
+                 a merchant's QR code, routing them to the claim screen. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="qistiraha" android:host="installment"/>
+            </intent-filter>
+            <!-- Legacy Qist-Link payload deep link: qistiraha://pay?... Kept so
+                 older shared links still open the app. -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>

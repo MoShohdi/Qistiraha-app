@@ -42,22 +42,41 @@ class DatabaseService {
   static Stream<List<InstallmentRow>> merchantInstallments() {
     final uid = _uid;
     if (uid == null) return Stream.value(const []);
-    final rows = _client
+    // Build the installment list from the realtime stream FIRST and
+    // unconditionally (identical mapping to the consumer stream). The buyer-
+    // name lookup below is purely decorative and must never gate, delay, or
+    // drop these rows — so it happens in a separate, fully-guarded step.
+    final installments = _client
         .from(_table)
         .stream(primaryKey: ['id'])
         .eq('merchant_id', uid)
-        .order('created_at');
-    return _seeded(
-      rows.asyncMap((raw) async {
-        final names = await _merchantCustomerNames();
-        return raw.map((m) {
-          final name = names[m['id']];
-          return InstallmentRow.fromMap(
-            name == null ? m : {...m, 'customer_name': name},
-          );
-        }).toList();
-      }),
-    );
+        .order('created_at')
+        .map(_mapRows);
+    return _seeded(installments.asyncMap(_decorateWithCustomerNames));
+  }
+
+  /// Overlays the real buyer name onto each row, best-effort. ANY failure —
+  /// the RPC erroring, timing out, or the `merchant_customer_names` function
+  /// not existing yet — returns the rows UNCHANGED. The installments are never
+  /// lost to the name lookup; worst case the merchant sees the generic label.
+  static Future<List<InstallmentRow>> _decorateWithCustomerNames(
+    List<InstallmentRow> rows,
+  ) async {
+    if (rows.isEmpty) return rows;
+    Map<String, String> names;
+    try {
+      names = await _merchantCustomerNames().timeout(
+        const Duration(seconds: 6),
+        onTimeout: () => const <String, String>{},
+      );
+    } catch (_) {
+      names = const {};
+    }
+    if (names.isEmpty) return rows;
+    return [
+      for (final r in rows)
+        names.containsKey(r.id) ? r.withCustomerName(names[r.id]) : r,
+    ];
   }
 
   /// Calls the SECURITY DEFINER `merchant_customer_names` RPC and returns a
@@ -676,6 +695,34 @@ class InstallmentRow {
       customerName: m['customer_name'] as String?,
     );
   }
+
+  /// Returns a copy with [customerName] overlaid — used to decorate merchant
+  /// rows with the buyer's real name (from the `merchant_customer_names` RPC)
+  /// without rebuilding from the raw map.
+  InstallmentRow withCustomerName(String? name) => InstallmentRow(
+    id: id,
+    merchantId: merchantId,
+    consumerId: consumerId,
+    itemDescription: itemDescription,
+    totalAmount: totalAmount,
+    paidAmount: paidAmount,
+    monthlyPayment: monthlyPayment,
+    paymentFrequency: paymentFrequency,
+    totalMonths: totalMonths,
+    paidMonths: paidMonths,
+    dueDate: dueDate,
+    downPayment: downPayment,
+    interestRate: interestRate,
+    category: category,
+    provider: provider,
+    merchantName: merchantName,
+    isLongTerm: isLongTerm,
+    pastPayments: pastPayments,
+    lastPaidAt: lastPaidAt,
+    status: status,
+    receiptImageUrl: receiptImageUrl,
+    customerName: name,
+  );
 
   // ── lifecycle ────────────────────────────────────────────────────────────
   bool get isPending => status == 'pending_scan';
