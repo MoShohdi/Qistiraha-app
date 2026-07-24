@@ -91,7 +91,12 @@ class AuthService {
   // Session / role resolution
   // ---------------------------------------------------------------------------
 
-  static Future<void> signOut() => _client.auth.signOut();
+  static Future<void> signOut() {
+    // Tear down session-scoped data caches (e.g. the shared merchant realtime
+    // subscription) so the next user doesn't inherit a stale stream.
+    DatabaseService.resetSession();
+    return _client.auth.signOut();
+  }
 
   /// Persists the chosen role on `profiles`. Called exactly once per
   /// identity, from the Role Picker. When the user picks Merchant, this also

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -39,21 +40,77 @@ class DatabaseService {
   /// (`active`) rows, and sourced from the [`merchant_customer_names`] RPC that
   /// returns nothing but the name (never income or any other profile field).
   /// `asyncMap` keeps the name merge in step with every realtime update.
+  // --- Session-cached merchant stream ------------------------------------
+  // One realtime subscription per session, fanned out via a broadcast
+  // controller, with the last snapshot retained. New subscribers (e.g. a
+  // desktop widget that gets REMOUNTED when ResponsiveLayout swaps layouts on
+  // web) re-attach to this SAME live subscription and are replayed the last
+  // known list immediately — so a remount can never reset the dashboard to an
+  // empty array or race a fresh realtime channel teardown. Acts like a small
+  // hand-rolled BehaviorSubject.
+  static StreamController<List<InstallmentRow>>? _merchantCtrl;
+  static StreamSubscription<List<InstallmentRow>>? _merchantSub;
+  static List<InstallmentRow> _merchantLast = const [];
+  static String? _merchantCachedUid;
+
   static Stream<List<InstallmentRow>> merchantInstallments() {
     final uid = _uid;
-    if (uid == null) return Stream.value(const []);
-    // Build the installment list from the realtime stream FIRST and
-    // unconditionally (identical mapping to the consumer stream). The buyer-
-    // name lookup below is purely decorative and must never gate, delay, or
-    // drop these rows — so it happens in a separate, fully-guarded step.
-    final installments = _client
-        .from(_table)
-        .stream(primaryKey: ['id'])
-        .eq('merchant_id', uid)
-        .order('created_at')
-        .map(_mapRows);
-    return _seeded(installments.asyncMap(_decorateWithCustomerNames));
+    if (uid == null) {
+      _disposeMerchantStream();
+      return Stream.value(const []);
+    }
+    // (Re)build the shared pipeline only when it doesn't exist yet or the
+    // signed-in merchant changed — NOT on every call/rebuild.
+    if (_merchantCtrl == null || _merchantCachedUid != uid) {
+      _disposeMerchantStream();
+      _merchantCachedUid = uid;
+      final ctrl = StreamController<List<InstallmentRow>>.broadcast();
+      _merchantCtrl = ctrl;
+      // Build the installment list from the realtime stream FIRST and
+      // unconditionally (identical mapping to the consumer stream); the
+      // buyer-name lookup is a separate, fully-guarded decoration step.
+      final source = _client
+          .from(_table)
+          .stream(primaryKey: ['id'])
+          .eq('merchant_id', uid)
+          .order('created_at')
+          .map(_mapRows)
+          .asyncMap(_decorateWithCustomerNames);
+      _merchantSub = source.listen(
+        (rows) {
+          _merchantLast = rows;
+          if (!ctrl.isClosed) ctrl.add(rows);
+        },
+        onError: (Object e, StackTrace s) {
+          if (!ctrl.isClosed) ctrl.addError(e, s);
+        },
+      );
+    }
+    return _replayThenFollow(_merchantCtrl!);
   }
+
+  /// Replays the last known list to a new subscriber, then follows live
+  /// updates from the shared broadcast controller.
+  static Stream<List<InstallmentRow>> _replayThenFollow(
+    StreamController<List<InstallmentRow>> ctrl,
+  ) async* {
+    yield _merchantLast;
+    yield* ctrl.stream;
+  }
+
+  static void _disposeMerchantStream() {
+    _merchantSub?.cancel();
+    _merchantSub = null;
+    _merchantCtrl?.close();
+    _merchantCtrl = null;
+    _merchantLast = const [];
+    _merchantCachedUid = null;
+  }
+
+  /// Tears down session-scoped caches (the shared merchant realtime
+  /// subscription). Call on sign-out so the next user starts clean and no
+  /// stale subscription lingers.
+  static void resetSession() => _disposeMerchantStream();
 
   /// Overlays the real buyer name onto each row, best-effort. ANY failure —
   /// the RPC erroring, timing out, or the `merchant_customer_names` function

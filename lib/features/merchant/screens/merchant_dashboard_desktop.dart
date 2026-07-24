@@ -60,13 +60,23 @@ class _MerchantDashboardDesktopState extends State<MerchantDashboardDesktop> {
   String? _selectedCustomerKey;
   InstallmentRow? _selectedInstallment;
 
-  // Cached once so the realtime subscription and the storefront lookup aren't
-  // recreated on every rebuild (which would flap the StreamBuilder back to a
-  // loading state and refetch the business each frame).
-  late final Stream<List<InstallmentRow>> _plansStream =
-      DatabaseService.merchantInstallments();
-  late final Future<Business?> _businessFuture =
-      DatabaseService.merchantBusiness();
+  // Locked to this State's lifetime in initState() so no rebuild (hover,
+  // LayoutBuilder metrics change, FutureBuilder completion) ever recreates the
+  // stream and flaps it back to empty. Backed by DatabaseService's session
+  // cache, so even a full remount replays the last snapshot instantly.
+  late final Stream<List<InstallmentRow>> _plansStream;
+  late final Future<Business?> _businessFuture;
+
+  // Last non-null plan list seen. Retained so a transient rebuild where the
+  // snapshot is momentarily without data does NOT wipe the dashboard to zero.
+  List<InstallmentRow> _lastPlans = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _plansStream = DatabaseService.merchantInstallments();
+    _businessFuture = DatabaseService.merchantBusiness();
+  }
 
   Future<void> _logout(BuildContext context) async {
     await AuthService.signOut();
@@ -108,7 +118,14 @@ class _MerchantDashboardDesktopState extends State<MerchantDashboardDesktop> {
           body: StreamBuilder<List<InstallmentRow>>(
             stream: _plansStream,
             builder: (context, snapshot) {
-              final plans = snapshot.data ?? const <InstallmentRow>[];
+              // Only advance the cache on a real data event; otherwise keep the
+              // last list. So a rebuild that arrives before the first emission
+              // (ConnectionState.waiting) — or any transient null — renders the
+              // previous data instead of flashing back to zero.
+              if (snapshot.hasData) {
+                _lastPlans = snapshot.data!;
+              }
+              final plans = _lastPlans;
 
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
