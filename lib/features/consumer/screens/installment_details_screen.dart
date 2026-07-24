@@ -1,16 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
-import 'package:qistiraha/core/services/hive_service.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/services/time_service.dart';
-import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:lottie/lottie.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 
 class InstallmentDetailsScreen extends StatefulWidget {
-  final Installment installment;
+  final InstallmentRow installment;
 
   const InstallmentDetailsScreen({super.key, required this.installment});
 
@@ -24,16 +20,25 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     symbol: 'EGP ',
     decimalDigits: 2,
   );
+  // Held in state so mutations (payment, re-plan) can refresh it from Supabase.
+  late InstallmentRow _inst = _inst;
   bool _isByDate = true;
   DateTime? _desiredPayoffDate;
   double _newMonthlyPayment = 0.0;
   int _calculatedMonthsToPayoff = 0;
 
+  Future<void> _refresh() async {
+    final updated = await DatabaseService.fetchInstallment(_inst.id);
+    if (updated != null && mounted) setState(() => _inst = updated);
+  }
+
   void _applyNewPlan() async {
-    widget.installment.monthlyPayment = _newMonthlyPayment;
-    widget.installment.totalMonths =
-        widget.installment.paidMonths + _calculatedMonthsToPayoff;
-    await widget.installment.save(); // Save to Hive
+    await DatabaseService.updatePlanTerms(
+      _inst.id,
+      monthlyPayment: _newMonthlyPayment,
+      totalMonths: _inst.paidMonths + _calculatedMonthsToPayoff,
+    );
+    await _refresh();
 
     setState(() {
       _newMonthlyPayment = 0.0;
@@ -69,15 +74,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     );
 
     if (confirm == true) {
-      final userBox = HiveService.getUserBox();
-      if (userBox.isNotEmpty) {
-        var user = userBox.values.first;
-        user.installments?.remove(widget.installment);
-        await user.save();
-      }
-
-      await widget.installment.delete();
-
+      await DatabaseService.deleteInstallment(_inst.id);
       if (mounted) {
         Navigator.push(
           context,
@@ -92,9 +89,8 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
   void _calculateEarlyPayoff() {
     if (_desiredPayoffDate == null) return;
 
-    int remainingMonths =
-        widget.installment.totalMonths - widget.installment.paidMonths;
-    double remainingDebt = remainingMonths * widget.installment.monthlyPayment;
+    int remainingMonths = _inst.totalMonths - _inst.paidMonths;
+    double remainingDebt = remainingMonths * _inst.monthlyPayment;
 
     // Calculate months between now and desired payoff date
     int monthsToPayoff =
@@ -124,72 +120,10 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     }
   }
 
-  Future<void> _pickWarrantyImage(ImageSource source) async {
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: source);
-      if (image != null) {
-        widget.installment.warrantyImagePath = image.path;
-        await widget.installment.save();
-        setState(() {});
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to pick image: $e')));
-      }
-    }
-  }
-
-  void _showImageSourceDialog() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text(
-                  'Add Warranty Photo',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_outlined),
-                title: const Text('Take a Photo'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickWarrantyImage(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Choose from Gallery'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickWarrantyImage(ImageSource.gallery);
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    int remainingMonths =
-        widget.installment.totalMonths - widget.installment.paidMonths;
-    double remainingDebt = remainingMonths * widget.installment.monthlyPayment;
+    int remainingMonths = _inst.totalMonths - _inst.paidMonths;
+    double remainingDebt = remainingMonths * _inst.monthlyPayment;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -201,7 +135,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          widget.installment.merchantName,
+          _inst.merchantName,
           style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -218,28 +152,24 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            _buildAmountCard('TOTAL AMOUNT', widget.installment.amount),
+            _buildAmountCard('TOTAL AMOUNT', _inst.totalAmount),
             const SizedBox(height: 16),
             _buildRemainingDebtCard(remainingDebt),
             const SizedBox(height: 16),
             _buildDebtPaidCard(),
             const SizedBox(height: 16),
             _buildMonthlyPaymentCard(),
-            const SizedBox(height: 16),
-            _buildWarrantyCard(),
             const SizedBox(height: 24),
             _buildPaymentHistory(),
             const SizedBox(height: 24),
-            if (widget.installment.statusEnum != InstallmentStatus.paid) ...[
+            if (!_inst.isCompleted) ...[
               _buildEarlyPayoffCalculator(),
               const SizedBox(height: 24),
             ],
-            // A merchant-linked contract belongs to the merchant's ledger
-            // too — only the merchant can cancel it (from their own
-            // Installment Details screen). The consumer may still delete
-            // installments they tracked manually themselves.
-            if (widget.installment.merchantId == null ||
-                widget.installment.merchantId!.isEmpty)
+            // A merchant-issued plan can only be cancelled by that merchant.
+            // A self-added plan (merchant_id == the current user) is deletable
+            // here.
+            if (_inst.merchantId == DatabaseService.currentUserId)
               SizedBox(
                 width: double.infinity,
                 child: TextButton(
@@ -333,13 +263,11 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (widget.installment.totalPayments <= 20)
+            if (_inst.totalPayments <= 20)
               Row(
-                children: List.generate(widget.installment.totalPayments, (
-                  index,
-                ) {
-                  int paidSegments = widget.installment.paidPayments;
-                  int totalSegments = widget.installment.totalPayments;
+                children: List.generate(_inst.totalPayments, (index) {
+                  int paidSegments = _inst.paidPayments;
+                  int totalSegments = _inst.totalPayments;
 
                   // No penalties: segments are simply paid vs. remaining.
                   Color segmentColor;
@@ -367,9 +295,8 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: widget.installment.totalPayments > 0
-                      ? widget.installment.paidPayments /
-                            widget.installment.totalPayments
+                  value: _inst.totalPayments > 0
+                      ? _inst.paidPayments / _inst.totalPayments
                       : 0.0,
                   backgroundColor: Colors.grey[200],
                   color: Theme.of(context).primaryColor,
@@ -380,7 +307,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: Text(
-                '${widget.installment.paidPayments} of ${widget.installment.totalPayments} paid',
+                '${_inst.paidPayments} of ${_inst.totalPayments} paid',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ),
@@ -391,22 +318,16 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
   }
 
   Widget _buildDebtPaidCard() {
-    double totalPaid = widget.installment.pastPayments.fold(
-      0.0,
-      (sum, p) => sum + p,
-    );
-    double totalPenalty = widget.installment.pastPayments.fold(0.0, (sum, p) {
+    double totalPaid = _inst.pastPayments.fold(0.0, (sum, p) => sum + p);
+    double totalPenalty = _inst.pastPayments.fold(0.0, (sum, p) {
       return sum +
-          (p > widget.installment.monthlyPayment
-              ? (p - widget.installment.monthlyPayment)
-              : 0.0);
+          (p > _inst.monthlyPayment ? (p - _inst.monthlyPayment) : 0.0);
     });
     double totalRegular = totalPaid - totalPenalty;
 
     // Fallback if no pastPayments stored (for legacy test data)
-    if (totalPaid == 0 && widget.installment.paidMonths > 0) {
-      totalPaid =
-          widget.installment.paidMonths * widget.installment.monthlyPayment;
+    if (totalPaid == 0 && _inst.paidMonths > 0) {
+      totalPaid = _inst.paidMonths * _inst.monthlyPayment;
       totalRegular = totalPaid;
     }
 
@@ -483,7 +404,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   ),
                 if (penaltyRatio == 0) const SizedBox(),
                 Text(
-                  '${widget.installment.paidPayments} of ${widget.installment.totalPayments} paid',
+                  '${_inst.paidPayments} of ${_inst.totalPayments} paid',
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
               ],
@@ -495,8 +416,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
   }
 
   Widget _buildMonthlyPaymentCard() {
-    final bool isOverdue =
-        widget.installment.statusEnum == InstallmentStatus.overdue;
+    final bool isOverdue = _inst.isOverdue;
 
     return CardPopIn(
       id: 'details-monthly-payment-card',
@@ -514,7 +434,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             Row(
               children: [
                 Text(
-                  widget.installment.paymentFrequencyLabel.toUpperCase(),
+                  _inst.paymentFrequencyLabel.toUpperCase(),
                   style: const TextStyle(
                     color: Colors.black87,
                     fontSize: 12,
@@ -547,7 +467,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                currencyFormatter.format(widget.installment.monthlyPayment),
+                currencyFormatter.format(_inst.monthlyPayment),
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -561,12 +481,12 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                 const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  'Due ${widget.installment.dueDate.day}th of ${widget.installment.paymentCadencePhrase}',
+                  'Due ${_inst.dueDate.day}th of ${_inst.paymentCadencePhrase}',
                   style: TextStyle(color: Colors.grey[600], fontSize: 13),
                 ),
               ],
             ),
-            if (widget.installment.statusEnum != InstallmentStatus.paid) ...[
+            if (!_inst.isCompleted) ...[
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
@@ -589,12 +509,10 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                         fontSize: 13,
                       ),
                       children: [
-                        TextSpan(
-                          text: 'Mark ${widget.installment.periodNoun} as Paid\n',
-                        ),
+                        TextSpan(text: 'Mark ${_inst.periodNoun} as Paid\n'),
                         TextSpan(
                           text:
-                              '(${currencyFormatter.format(widget.installment.monthlyPayment)})',
+                              '(${currencyFormatter.format(_inst.monthlyPayment)})',
                           style: TextStyle(
                             color: Colors.grey.shade600,
                             fontWeight: FontWeight.normal,
@@ -616,21 +534,21 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
   /// Records a single on-time period payment. No penalties, no arrears
   /// bundling — one tap advances the plan by exactly one payment period.
   Future<void> _markOnePeriodPaid() async {
-    final inst = widget.installment;
-    if (inst.paidPayments >= inst.totalPayments) return;
+    if (_inst.paidPayments >= _inst.totalPayments) return;
+    final wasLast = _inst.paidPayments + 1 >= _inst.totalPayments;
 
-    inst.pastPayments = List.from(inst.pastPayments)..add(inst.monthlyPayment);
-    inst.paidMonths += inst.monthsPerPayment;
-    inst.dueDate = DateTime(
-      inst.dueDate.year,
-      inst.dueDate.month + inst.monthsPerPayment,
-      inst.dueDate.day,
-    );
+    try {
+      await DatabaseService.recordPayment(_inst);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not record payment.')),
+        );
+      }
+      return;
+    }
 
-    if (inst.paidPayments >= inst.totalPayments) {
-      inst.statusEnum = InstallmentStatus.paid;
-      inst.lastPaidAt = TimeService.now();
-      await inst.save();
+    if (wasLast) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -643,236 +561,12 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
       }
       return;
     }
-
-    if (inst.statusEnum == InstallmentStatus.overdue &&
-        inst.dueDate.isAfter(TimeService.now())) {
-      inst.statusEnum = InstallmentStatus.active;
-    }
-    inst.lastPaidAt = TimeService.now();
-    await inst.save();
-    if (mounted) setState(() {});
-  }
-
-  Widget _buildWarrantyCard() {
-    return CardPopIn(
-      id: 'details-warranty-card',
-      builder: (context, animate) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey[200]!),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'WARRANTY & RECEIPT',
-              style: TextStyle(
-                color: Colors.black87,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (widget.installment.warrantyImagePath == null)
-              GestureDetector(
-                onTap: _showImageSourceDialog,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[300]!, width: 1.5),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.camera_alt_outlined,
-                        color: Colors.grey[500],
-                        size: 32,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tap to add warranty photo',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(
-                      File(widget.installment.warrantyImagePath!),
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Document Saved',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => Dialog(
-                                      insetPadding: const EdgeInsets.all(16),
-                                      child: Stack(
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              16,
-                                            ),
-                                            child: Image.file(
-                                              File(
-                                                widget
-                                                    .installment
-                                                    .warrantyImagePath!,
-                                              ),
-                                            ),
-                                          ),
-                                          Positioned(
-                                            top: 8,
-                                            right: 8,
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.close,
-                                                color: Colors.white,
-                                                shadows: [
-                                                  Shadow(
-                                                    color: Colors.black45,
-                                                    blurRadius: 4,
-                                                  ),
-                                                ],
-                                              ),
-                                              onPressed: () =>
-                                                  Navigator.pop(context),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(
-                                  Icons.fullscreen,
-                                  size: 16,
-                                  color: Colors.black,
-                                ),
-                                label: const Text(
-                                  'View',
-                                  style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 8,
-                                  ),
-                                  side: BorderSide(color: Colors.grey[300]!),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  bool? confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text(
-                                        'Remove Warranty Document',
-                                      ),
-                                      content: const Text(
-                                        'Are you sure you want to remove this image? This action cannot be undone.',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, false),
-                                          child: const Text(
-                                            'Cancel',
-                                            style: TextStyle(
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ),
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, true),
-                                          child: const Text(
-                                            'Remove',
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-
-                                  if (confirm == true) {
-                                    widget.installment.warrantyImagePath = null;
-                                    await widget.installment.save();
-                                    setState(() {});
-                                  }
-                                },
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  size: 16,
-                                  color: Colors.red,
-                                ),
-                                label: const Text(
-                                  'Remove',
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 8,
-                                  ),
-                                  side: const BorderSide(color: Colors.red),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ).popInIf(animate, 0),
-      ),
-    );
+    await _refresh();
   }
 
   Widget _buildPaymentHistory() {
     List<Widget> historyItems = [];
-    final inst = widget.installment;
+    final inst = _inst;
 
     // One node per payment PERIOD, not per month — a 12-month Semi-Annual
     // plan shows 2 nodes, not 12. Amounts are the per-period chunk stored in

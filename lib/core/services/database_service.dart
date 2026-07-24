@@ -15,6 +15,10 @@ class DatabaseService {
   static SupabaseClient get _client => Supabase.instance.client;
   static String? get _uid => _client.auth.currentUser?.id;
 
+  /// The current authenticated user's id (or null). Used e.g. to decide
+  /// whether a plan is self-owned (deletable) vs. merchant-issued.
+  static String? get currentUserId => _uid;
+
   static const String _table = 'installments';
 
   // ---------------------------------------------------------------------------
@@ -108,6 +112,60 @@ class DatabaseService {
         .select('id')
         .single();
     return row['id'] as String;
+  }
+
+  /// Creates a self-tracked installment (the consumer manually logging a plan
+  /// they already have elsewhere). Unlike [createInstallment], this sets
+  /// `merchant_id == consumer_id == auth.uid()` and status `active`, so the
+  /// row appears immediately on the caller's own [consumerInstallments]
+  /// stream — no scan/claim handshake needed.
+  static Future<void> addSelfInstallment({
+    required String itemDescription,
+    required double totalAmount,
+    required int totalMonths,
+    required double monthlyPayment,
+    required DateTime dueDate,
+    required double downPayment,
+    required double interestRate,
+    required String category,
+    required bool isLongTerm,
+    required String paymentFrequency,
+    required String provider,
+    required String merchantName,
+    int paidMonths = 0,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not authenticated.');
+
+    final monthsPerPayment = _monthsPerPaymentFor(paymentFrequency);
+    final paidPeriods = monthsPerPayment > 0
+        ? paidMonths ~/ monthsPerPayment
+        : paidMonths;
+    // Reconstruct a "already paid" history for legacy plans the user says
+    // they've partly paid off, so timelines/progress render correctly.
+    final past = List<double>.filled(paidPeriods, monthlyPayment);
+
+    await _client.from(_table).insert({
+      'merchant_id': uid,
+      'consumer_id': uid,
+      'item_description': itemDescription,
+      'total_amount': totalAmount,
+      'months': totalMonths,
+      'total_months': totalMonths,
+      'paid_months': paidMonths,
+      'paid_amount': paidPeriods * monthlyPayment,
+      'monthly_payment': monthlyPayment,
+      'payment_frequency': paymentFrequency,
+      'down_payment': downPayment,
+      'interest_rate': interestRate,
+      'category': category,
+      'provider': provider,
+      'merchant_name': merchantName,
+      'is_long_term': isLongTerm,
+      'due_date': dueDate.toIso8601String().substring(0, 10),
+      'past_payments': past,
+      'status': 'active',
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -219,6 +277,33 @@ class DatabaseService {
     await _client
         .from(_table)
         .update({'consumer_id': _uid, 'status': 'active'})
+        .eq('id', id);
+  }
+
+  /// Deletes an installment row. RLS lets this succeed only for the issuing
+  /// merchant — which, for a self-added plan (merchant_id == consumer_id ==
+  /// the user), is the user themselves.
+  static Future<void> deleteInstallment(String id) async {
+    if (_uid == null) throw StateError('Not authenticated.');
+    await _client.from(_table).delete().eq('id', id);
+  }
+
+  /// Re-plans an installment's terms (early-payoff calculator): sets a new
+  /// per-period amount and total month count. Allowed by the "consumer
+  /// updates own" RLS policy.
+  static Future<void> updatePlanTerms(
+    String id, {
+    required double monthlyPayment,
+    required int totalMonths,
+  }) async {
+    if (_uid == null) throw StateError('Not authenticated.');
+    await _client
+        .from(_table)
+        .update({
+          'monthly_payment': monthlyPayment,
+          'total_months': totalMonths,
+          'months': totalMonths,
+        })
         .eq('id', id);
   }
 

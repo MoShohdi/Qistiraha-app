@@ -143,34 +143,76 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
   }
 
   Future<void> _editIncome() async {
-    final controller = TextEditingController(
+    final incomeController = TextEditingController(
       text: _income > 0 ? _income.toStringAsFixed(0) : '',
     );
-    final result = await showDialog<double>(
+    int pendingSalaryDay = _salaryDay;
+
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Monthly Income'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          decoration: const InputDecoration(prefixText: 'EGP ', hintText: '0'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Income & Payday'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Monthly Income',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: incomeController,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  prefixText: 'EGP ',
+                  hintText: '0',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Payday (day your salary lands)',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<int>(
+                value: pendingSalaryDay,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: [
+                  for (int d = 1; d <= 28; d++)
+                    DropdownMenuItem(value: d, child: Text('Day $d')),
+                ],
+                onChanged: (v) => setDialogState(
+                  () => pendingSalaryDay = v ?? pendingSalaryDay,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () =>
-                Navigator.pop(context, double.tryParse(controller.text)),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
-    if (result == null) return;
-    await DatabaseService.updateIncome(result, salaryDay: _salaryDay);
+
+    if (saved != true) return;
+    final income = double.tryParse(incomeController.text) ?? _income;
+    await DatabaseService.updateIncome(income, salaryDay: pendingSalaryDay);
     await _loadProfile();
   }
 
