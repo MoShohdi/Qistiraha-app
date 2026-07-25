@@ -176,8 +176,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
   void _calculateEarlyPayoff() {
     if (_desiredPayoffDate == null) return;
 
-    int remainingMonths = _inst.totalMonths - _inst.paidMonths;
-    double remainingDebt = remainingMonths * _inst.monthlyPayment;
+    final double remainingDebt = _inst.remaining; // totalAmount - paidAmount
 
     // Calculate months between now and desired payoff date
     int monthsToPayoff =
@@ -209,8 +208,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    int remainingMonths = _inst.totalMonths - _inst.paidMonths;
-    double remainingDebt = remainingMonths * _inst.monthlyPayment;
+    final double remainingDebt = _inst.remaining; // totalAmount - paidAmount
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),

@@ -23,7 +23,10 @@ class MerchantInsightsScreen extends StatelessWidget {
     required this.currency,
   });
 
-  double get _totalExpected => plans.fold(0.0, (sum, i) => sum + i.amount);
+  // Outstanding still to collect across active plans (totalAmount - paidAmount),
+  // not the gross contract value.
+  double get _totalExpected =>
+      plans.where((i) => i.isActive).fold(0.0, (sum, i) => sum + i.remaining);
 
   double get _totalCollected => plans.fold(0.0, (sum, i) {
     if (i.pastPayments.isNotEmpty) {
