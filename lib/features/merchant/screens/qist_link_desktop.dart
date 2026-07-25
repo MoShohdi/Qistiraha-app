@@ -4,31 +4,49 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:qistiraha/core/utils/responsive_layout.dart';
-import '../models/qist_link_payload.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 const _kInk = Color(0xFF1E2337);
 const _kBg = Color(0xFFF8F9FA);
 const _kWhatsApp = Color(0xFF25D366);
 
-/// Desktop/web rendition of the Qist-Link success screen — same
-/// [QistLinkPayload], link URI, copy and WhatsApp-share actions as the
-/// mobile [QistLinkScreen], laid out as a centered split card: the QR on
-/// the left, the plan summary and share actions on the right. Uses the
-/// floating desktop toast instead of full-width mobile snackbars.
+/// Desktop/web rendition of the Qist-Link success screen — same link, copy
+/// and WhatsApp-share actions as the mobile [QistLinkScreen], laid out as a
+/// centered split card: the QR on the left, the plan summary and share
+/// actions on the right. [link] is the real Supabase deep link
+/// (`qistiraha://installment/<id>`) for the freshly created `pending_scan`
+/// row. Uses the floating desktop toast instead of full-width mobile snackbars.
 class QistLinkDesktopScreen extends StatelessWidget {
-  final QistLinkPayload payload;
+  /// Native deep link (`qistiraha://installment/<id>`) — encoded in the QR.
+  final String link;
 
-  const QistLinkDesktopScreen({super.key, required this.payload});
+  /// Web link (`https://<host>/?claim_id=<id>`) — pasteable/shareable URL used
+  /// for copy + WhatsApp so a buyer on any device can open it.
+  final String webLink;
+  final String item;
+  final double price;
+  final int months;
 
-  String get _link => payload.toUri().toString();
+  const QistLinkDesktopScreen({
+    super.key,
+    required this.link,
+    required this.webLink,
+    required this.item,
+    required this.price,
+    required this.months,
+  });
+
+  /// The QR MUST encode the native custom scheme (`qistiraha://installment/…`)
+  /// so scanning it opens the app directly, not the browser. The https web
+  /// link is used only for the Copy and WhatsApp-share buttons.
+  String get _nativeQrLink => link;
 
   Future<void> _shareViaWhatsApp(BuildContext context) async {
     final currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
     final message =
-        'Here is your Qistiraha installment plan for ${payload.item} '
-        '(${currency.format(payload.price)} over ${payload.months} months). '
-        'Click here to add it to your app: $_link';
+        'Here is your Qistiraha installment plan for $item '
+        '(${currency.format(price)} over $months months). '
+        'Click here to add it to your app: $webLink';
 
     // No recipient prefill — the merchant picks the chat; buyer identity
     // is supplied by the consumer's own account when they open the link.
@@ -49,16 +67,14 @@ class QistLinkDesktopScreen extends StatelessWidget {
   }
 
   void _copyLink(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: _link));
+    Clipboard.setData(ClipboardData(text: webLink));
     showDesktopSnackBar(context, message: 'Link copied to clipboard');
   }
 
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
-    final monthly = payload.months > 0
-        ? payload.price / payload.months
-        : payload.price;
+    final monthly = months > 0 ? price / months : price;
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -139,7 +155,7 @@ class QistLinkDesktopScreen extends StatelessWidget {
               width: 240,
               height: 240,
               child: QrImageView(
-                data: _link,
+                data: _nativeQrLink,
                 version: QrVersions.auto,
                 size: 240.0,
                 backgroundColor: Colors.white,
@@ -214,17 +230,16 @@ class QistLinkDesktopScreen extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _SummaryRow(label: 'Item', value: payload.item),
+                _SummaryRow(label: 'Item', value: item),
                 const SizedBox(height: 10),
                 _SummaryRow(
                   label: 'Total Price',
-                  value: currency.format(payload.price),
+                  value: currency.format(price),
                 ),
                 const SizedBox(height: 10),
                 _SummaryRow(
                   label: 'Terms',
-                  value:
-                      '${payload.months} month${payload.months == 1 ? '' : 's'}',
+                  value: '$months month${months == 1 ? '' : 's'}',
                 ),
                 const SizedBox(height: 10),
                 _SummaryRow(
@@ -255,7 +270,7 @@ class QistLinkDesktopScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        _link,
+                        webLink,
                         style: TextStyle(color: Colors.grey[700], fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),

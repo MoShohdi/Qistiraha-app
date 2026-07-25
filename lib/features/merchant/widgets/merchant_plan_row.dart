@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
+import 'package:qistiraha/features/merchant/widgets/installment_row_compat.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 
@@ -10,7 +11,7 @@ const _kBrand = Color(0xFF99AFD7);
 /// also reused verbatim on [MerchantCustomerProfileScreen] so a customer's
 /// plan list looks identical to the main Active tab.
 class MerchantPlanRow extends StatelessWidget {
-  final Installment installment;
+  final InstallmentRow installment;
   final NumberFormat currency;
   final VoidCallback? onTap;
 

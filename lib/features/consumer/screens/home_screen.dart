@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:qistiraha/core/services/hive_service.dart';
-import 'package:qistiraha/features/auth/models/user_account.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/core/services/time_service.dart';
-import 'package:qistiraha/core/engine/penalty_engine.dart';
-import 'package:qistiraha/features/consumer/models/enums.dart';
-import 'package:qistiraha/core/engine/affordability_engine.dart';
+import 'package:qistiraha/core/services/database_service.dart';
+import 'package:qistiraha/core/engine/affordability_live.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
+import 'package:qistiraha/widgets/stream_error_view.dart';
 import 'add_installment_screen.dart';
 import 'installment_details_screen.dart';
 
@@ -22,6 +18,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _sortBy = 'urgency';
 
+  // Profile finance now lives on Supabase, not Hive. Installments stream live;
+  // the latest snapshot is cached here so the (off-stream) what-if simulator
+  // can use it.
+  double _income = 0;
+  int _salaryDay = 1;
+  String _name = '';
+  bool _profileLoaded = false;
+  List<InstallmentRow> _rows = const [];
+
+  // Create the realtime stream ONCE. Recreating it inside build() (as before)
+  // resubscribed on every rebuild and reset the StreamBuilder to "waiting",
+  // which is why data only appeared after a tab toggle. Not `final` so
+  // [_retry] can rebuild it after an error.
+  Stream<List<InstallmentRow>> _installmentsStream =
+      DatabaseService.consumerInstallments();
+
   // --- What-If Simulator state ---
   final _whatIfCostController = TextEditingController();
   final _whatIfDownPaymentController = TextEditingController();
@@ -31,9 +43,39 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _loadProfile();
     _whatIfCostController.addListener(_runSimulation);
     _whatIfDownPaymentController.addListener(_runSimulation);
     _whatIfMonthsController.addListener(_runSimulation);
+  }
+
+  Future<void> _loadProfile() async {
+    // profileFinance() already swallows its own errors and returns defaults,
+    // but guard here too so _profileLoaded always flips true — otherwise a
+    // hung profile fetch would keep the whole screen on a spinner forever.
+    ProfileFinance p;
+    try {
+      p = await DatabaseService.profileFinance();
+    } catch (_) {
+      p = const ProfileFinance();
+    }
+    if (!mounted) return;
+    setState(() {
+      _income = p.monthlyIncome;
+      _salaryDay = p.salaryDay;
+      _name = p.name;
+      _profileLoaded = true;
+    });
+  }
+
+  /// Rebuilds the realtime subscription and re-fetches the profile — wired to
+  /// the Retry button shown when the stream errors.
+  void _retry() {
+    setState(() {
+      _profileLoaded = false;
+      _installmentsStream = DatabaseService.consumerInstallments();
+    });
+    _loadProfile();
   }
 
   void _runSimulation() {
@@ -45,16 +87,13 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _simulatedOutlook = null);
       return;
     }
-    final box = HiveService.getUserBox();
-    if (box.isEmpty) return;
-    final user = box.values.first;
-    final outlook = AffordabilityEngine.simulatePurchase(
+    final outlook = LiveAffordabilityEngine.simulatePurchase(
       itemCost: cost,
       months: months,
       downPayment: downPayment,
-      existing: user.installments?.toList() ?? [],
-      monthlyIncome: user.monthlyIncome,
-      salaryDay: user.salaryDay,
+      existing: _rows,
+      monthlyIncome: _income,
+      salaryDay: _salaryDay,
     );
     setState(() => _simulatedOutlook = outlook);
   }
@@ -97,196 +136,184 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: ValueListenableBuilder(
-        valueListenable: HiveService.getUserBox().listenable(),
-        builder: (context, Box<UserAccount> box, _) {
-          if (box.isEmpty) {
-            return const Center(child: Text("No User Data Found"));
+      body: StreamBuilder<List<InstallmentRow>>(
+        stream: _installmentsStream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return StreamErrorView(onRetry: _retry);
           }
+          if (!_profileLoaded || !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          _rows = snapshot.data ?? const <InstallmentRow>[];
 
-          UserAccount user = box.values.first;
+          final double totalPaymentThisMonth =
+              LiveAffordabilityEngine.totalMonthlyPayment(_rows);
+          final double totalOutstanding =
+              LiveAffordabilityEngine.totalOutstandingDebt(_rows);
+          final AffordabilityStatus status = LiveAffordabilityEngine.status(
+            _rows,
+            _income,
+          );
 
-          return ValueListenableBuilder(
-            valueListenable: HiveService.getInstallmentBox().listenable(),
-            builder: (context, Box<Installment> installmentBox, _) {
-              double totalPaymentThisMonth =
-                  AffordabilityEngine.calculateTotalMonthlyPayment(user);
-              double totalOutstanding =
-                  AffordabilityEngine.calculateTotalOutstandingDebt(user);
-              AffordabilityStatus status = AffordabilityEngine.calculateStatus(
-                user,
-              );
-
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hello, ${_name.isEmpty ? 'there' : _name}',
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  DateFormat.yMMMMEEEEd().format(TimeService.now()),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Here is your financial overview.',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                const SizedBox(height: 24),
+                Builder(
+                  builder: (context) {
+                    final activeCount = _rows
+                        .where((inst) => !inst.isCompleted)
+                        .length;
+                    return _buildKPICards(
+                      totalPaymentThisMonth,
+                      totalOutstanding,
+                      status,
+                      activeCount,
+                      "Across all your active installments",
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+                _buildSandboxCard(),
+                const SizedBox(height: 32),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Hello, ${user.name}',
-                      style: const TextStyle(
-                        fontSize: 28,
+                    const Text(
+                      'Your Obligations',
+                      style: TextStyle(
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      DateFormat.yMMMMEEEEd().format(TimeService.now()),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Here is your financial overview.',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 24),
-                    Builder(
-                      builder: (context) {
-                        List<Installment> activeInstallments =
-                            (user.installments?.toList() ?? <Installment>[])
-                                .where(
-                                  (inst) =>
-                                      inst.paidMonths < inst.totalMonths &&
-                                      inst.statusEnum != InstallmentStatus.paid,
-                                )
-                                .toList();
-
-                        int activeCount = activeInstallments.length;
-
-                        return _buildKPICards(
-                          totalPaymentThisMonth,
-                          totalOutstanding,
-                          status,
-                          activeCount,
-                          "Across all your active installments",
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    _buildSandboxCard(user),
-                    const SizedBox(height: 32),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Your Obligations',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                        DropdownButton<String>(
+                          value: _sortBy,
+                          underline: const SizedBox(),
+                          icon: const Icon(
+                            Icons.sort,
+                            color: Colors.black,
+                            size: 20,
                           ),
-                        ),
-                        Row(
-                          children: [
-                            DropdownButton<String>(
-                              value: _sortBy,
-                              underline: const SizedBox(),
-                              icon: const Icon(
-                                Icons.sort,
-                                color: Colors.black,
-                                size: 20,
-                              ),
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'name',
-                                  child: Text('Name'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'total debt',
-                                  child: Text('Total Debt'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'installment debt',
-                                  child: Text('Installment Debt'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'installment duration',
-                                  child: Text('Duration'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'urgency',
-                                  child: Text('Urgency'),
-                                ),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _sortBy = val;
-                                  });
-                                }
-                              },
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'name',
+                              child: Text('Name'),
                             ),
-                            const SizedBox(width: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                shape: BoxShape.circle,
-                              ),
-                              child: IconButton(
-                                icon: const Icon(Icons.add, size: 20),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const AddInstallmentScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
+                            DropdownMenuItem(
+                              value: 'total debt',
+                              child: Text('Total Debt'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'installment debt',
+                              child: Text('Installment Debt'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'installment duration',
+                              child: Text('Duration'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'urgency',
+                              child: Text('Urgency'),
                             ),
                           ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                _sortBy = val;
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.add, size: 20),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const AddInstallmentScreen(),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Short-Term Obligations',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildDebtFreeSubCard(
-                      user,
-                      isLongTerm: false,
-                      titlePrefix: 'Retail Debt-Free',
-                    ),
-                    _buildUrgentWarning(user, false),
-                    const SizedBox(height: 16),
-                    _buildInstallmentsList(user.installments, false),
-                    const SizedBox(height: 32),
-                    const Text(
-                      'Long-Term Assets',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildDebtFreeSubCard(
-                      user,
-                      isLongTerm: true,
-                      titlePrefix: 'Asset Payoff Target',
-                    ),
-                    _buildUrgentWarning(user, true),
-                    const SizedBox(height: 16),
-                    _buildInstallmentsList(user.installments, true),
                   ],
                 ),
-              );
-            },
+                const SizedBox(height: 24),
+                const Text(
+                  'Short-Term Obligations',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildDebtFreeSubCard(
+                  isLongTerm: false,
+                  titlePrefix: 'Retail Debt-Free',
+                ),
+                _buildUrgentWarning(false),
+                const SizedBox(height: 16),
+                _buildInstallmentsList(false),
+                const SizedBox(height: 32),
+                const Text(
+                  'Long-Term Assets',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildDebtFreeSubCard(
+                  isLongTerm: true,
+                  titlePrefix: 'Asset Payoff Target',
+                ),
+                _buildUrgentWarning(true),
+                const SizedBox(height: 16),
+                _buildInstallmentsList(true),
+              ],
+            ),
           );
         },
       ),
@@ -457,23 +484,16 @@ class _HomeScreenState extends State<HomeScreen> {
   // ---------------------------------------------------------------------------
   // Urgent Warning Helper
   // ---------------------------------------------------------------------------
-  Widget _buildUrgentWarning(UserAccount user, bool isLongTerm) {
-    List<Installment> activeInstallments =
-        (user.installments?.toList() ?? <Installment>[])
-            .where(
-              (inst) =>
-                  inst.paidMonths < inst.totalMonths &&
-                  inst.statusEnum != InstallmentStatus.paid &&
-                  inst.isLongTerm == isLongTerm,
-            )
-            .toList();
+  Widget _buildUrgentWarning(bool isLongTerm) {
+    final activeInstallments = _rows
+        .where((inst) => !inst.isCompleted && inst.isLongTerm == isLongTerm)
+        .toList();
 
     if (activeInstallments.isEmpty) return const SizedBox.shrink();
 
     activeInstallments.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-    Installment nextInst = activeInstallments.first;
+    final nextInst = activeInstallments.first;
 
-    PenaltyResult pr = PenaltyEngine.calculateLateFees(nextInst);
     final currencyFormatter = NumberFormat.currency(
       symbol: 'EGP ',
       decimalDigits: 0,
@@ -490,20 +510,8 @@ class _HomeScreenState extends State<HomeScreen> {
     int daysLate = justDate.difference(dueDateJustDate).inDays;
     int daysUntilDue = dueDateJustDate.difference(justDate).inDays;
 
-    double displayAmountDue;
-    if (pr.isAccelerated) {
-      displayAmountDue =
-          ((nextInst.totalMonths - nextInst.paidMonths) *
-              nextInst.monthlyPayment) +
-          pr.lateFee;
-    } else if (pr.lateFee > 0 || daysLate > 0) {
-      displayAmountDue =
-          (nextInst.monthlyPayment *
-              PenaltyEngine.calculateMissedMonths(nextInst)) +
-          pr.lateFee;
-    } else {
-      displayAmountDue = nextInst.monthlyPayment;
-    }
+    // No penalties: the amount due is always just the next period's payment.
+    double displayAmountDue = nextInst.monthlyPayment;
 
     String amountStr = currencyFormatter.format(displayAmountDue);
     String itemDetails = "${nextInst.provider} (${nextInst.itemDescription})";
@@ -513,15 +521,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Color textColor = Colors.transparent;
     IconData iconData = Icons.warning;
 
-    if (pr.isAccelerated) {
-      warningText =
-          '🚨 DEFAULT: Entire balance of $amountStr is due for $itemDetails!';
-      bgColor = const Color(0xFFFFF0F0);
-      textColor = Colors.red[800]!;
-      iconData = Icons.error_outline;
-    } else if (daysLate > 0) {
-      warningText =
-          '🚨 Payment is late. Please contact your lender for late fees details.';
+    if (daysLate > 0) {
+      warningText = '🚨 Payment is overdue for $itemDetails. Pay $amountStr';
       bgColor = const Color(0xFFFFF0F0);
       textColor = Colors.red[800]!;
       iconData = Icons.warning_amber_rounded;
@@ -566,20 +567,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDebtFreeSubCard(
-    UserAccount user, {
+  Widget _buildDebtFreeSubCard({
     required bool isLongTerm,
     required String titlePrefix,
   }) {
-    final List<Installment> active = (user.installments?.toList() ?? [])
-        .where(
-          (i) =>
-              i.statusEnum != InstallmentStatus.paid &&
-              i.isLongTerm == isLongTerm,
-        )
+    final active = _rows
+        .where((i) => !i.isCompleted && i.isLongTerm == isLongTerm)
         .toList();
 
-    final DateTime debtFreeDate = AffordabilityEngine.getAbsoluteDebtFreeDate(
+    final DateTime debtFreeDate = LiveAffordabilityEngine.absoluteDebtFreeDate(
       active,
     );
     final DateTime now = TimeService.now();
@@ -649,7 +645,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // ---------------------------------------------------------------------------
   // What-If Sandbox Simulator Card
   // ---------------------------------------------------------------------------
-  Widget _buildSandboxCard(UserAccount user) {
+  Widget _buildSandboxCard() {
     final format = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
     final SimulatedOutlook? outlook = _simulatedOutlook;
 
@@ -969,24 +965,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildInstallmentsList(
-    HiveList<Installment>? installments,
-    bool isLongTerm,
-  ) {
-    if (installments == null || installments.isEmpty) {
-      return const Text(
-        "No active installments",
-        style: TextStyle(color: Colors.grey),
-      );
-    }
-
-    // Filter active installments
-    final activeList = installments
-        .where(
-          (inst) =>
-              inst.statusEnum != InstallmentStatus.paid &&
-              inst.isLongTerm == isLongTerm,
-        )
+  Widget _buildInstallmentsList(bool isLongTerm) {
+    // Filter active installments from the live stream snapshot.
+    final activeList = _rows
+        .where((inst) => !inst.isCompleted && inst.isLongTerm == isLongTerm)
         .toList();
 
     if (activeList.isEmpty) {
@@ -1004,12 +986,8 @@ class _HomeScreenState extends State<HomeScreen> {
             b.merchantName.toLowerCase(),
           );
         case 'total debt':
-          double debtA =
-              ((a.totalMonths - a.paidMonths) * a.monthlyPayment) +
-              PenaltyEngine.calculateLateFees(a).lateFee;
-          double debtB =
-              ((b.totalMonths - b.paidMonths) * b.monthlyPayment) +
-              PenaltyEngine.calculateLateFees(b).lateFee;
+          double debtA = (a.totalMonths - a.paidMonths) * a.monthlyPayment;
+          double debtB = (b.totalMonths - b.paidMonths) * b.monthlyPayment;
           return debtB.compareTo(debtA);
         case 'installment debt':
           return b.monthlyPayment.compareTo(a.monthlyPayment);
@@ -1042,61 +1020,12 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         int daysToDue = dueDateJustDate.difference(justDate).inDays;
 
-        bool isOverdue =
-            inst.statusEnum != InstallmentStatus.paid && daysToDue < 0;
+        bool isOverdue = !inst.isCompleted && daysToDue < 0;
 
-        PenaltyResult penaltyResult = PenaltyEngine.calculateLateFees(inst);
-        bool isAccelerated = penaltyResult.isAccelerated;
-        int remainingPeriods = inst.totalPayments - inst.paidPayments;
-
-        double displayAmountDue;
-
-        // --- Header: total accumulated debt (what the user owes in full) ---
-        int periodsOwed;
-        if (!isOverdue) {
-          periodsOwed = 1; // upcoming or on-time: show current active period
-        } else {
-          periodsOwed = PenaltyEngine.calculateUncappedMissedPeriods(inst);
-          if (periodsOwed > remainingPeriods) {
-            periodsOwed = remainingPeriods; // cap at remaining
-          }
-        }
-
-        if (isAccelerated) {
-          displayAmountDue = (remainingPeriods * inst.monthlyPayment);
-        } else {
-          displayAmountDue = (inst.monthlyPayment * periodsOwed);
-        }
-
-        // --- Button: immediate transaction cost (1 period for informal, arrears for commercial) ---
-        int regularPeriodsToPay = PenaltyEngine.calculateActualPeriodsToPay(
-          inst,
-        );
-        if (inst.paidPayments + regularPeriodsToPay > inst.totalPayments) {
-          regularPeriodsToPay = inst.totalPayments - inst.paidPayments;
-        }
-        double regularTransactionCost =
-            (inst.monthlyPayment * regularPeriodsToPay);
-
-        int fullPeriodsToPay = inst.totalPayments - inst.paidPayments;
-        double fullTransactionCost = (inst.monthlyPayment * fullPeriodsToPay);
-
-        int visualRedSegments = 0;
-        if (isOverdue) {
-          visualRedSegments = PenaltyEngine.calculateUncappedMissedPeriods(
-            inst,
-          );
-        }
-        visualRedSegments = visualRedSegments > remainingPeriods
-            ? remainingPeriods
-            : visualRedSegments;
-
-        String dueText;
-        if (isAccelerated) {
-          dueText = '⚠️ DEFAULT STATUS: ENTIRE BALANCE DUE';
-        } else {
-          dueText = TimeService.formatDueDate(daysToDue);
-        }
+        // No penalties/acceleration: the amount shown is a single period's
+        // payment, and the button marks exactly one period paid.
+        double displayAmountDue = inst.monthlyPayment;
+        String dueText = TimeService.formatDueDate(daysToDue);
 
         return CardPopIn(
           id: inst.id,
@@ -1281,19 +1210,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ) {
                               int paidSegments = inst.paidPayments;
                               int totalSegments = inst.totalPayments;
-                              int redSegments = 0;
 
-                              if (isAccelerated) {
-                                redSegments = totalSegments - paidSegments;
-                              } else {
-                                redSegments = visualRedSegments;
-                              }
-
+                              // No penalties: paid vs. remaining only.
                               Color segmentColor;
                               if (index < paidSegments) {
                                 segmentColor = Theme.of(context).primaryColor;
-                              } else if (index < paidSegments + redSegments) {
-                                segmentColor = Colors.red;
                               } else {
                                 segmentColor = Colors.grey[200]!;
                               }
@@ -1326,197 +1247,71 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                       ],
                     ).popInIf(animate, 2),
-                    if (inst.statusEnum != InstallmentStatus.paid) ...[
+                    if (!inst.isCompleted) ...[
                       const SizedBox(height: 16),
                       // ── Tier 2: pay button (same 200ms tier as progress) ──
                       (() {
-                        Future<void> pay(int periodsToPay) async {
-                          if (inst.paidPayments < inst.totalPayments) {
-                            double evenlyDistributedPenalty = 0.0;
-
-                            for (int i = 0; i < periodsToPay; i++) {
-                              inst.pastPayments = List.from(inst.pastPayments)
-                                ..add(
-                                  inst.monthlyPayment +
-                                      evenlyDistributedPenalty,
-                                );
-                            }
-
-                            int monthsToAdvance =
-                                periodsToPay * inst.monthsPerPayment;
-                            inst.paidMonths += monthsToAdvance;
-                            inst.dueDate = DateTime(
-                              inst.dueDate.year,
-                              inst.dueDate.month + monthsToAdvance,
-                              inst.dueDate.day,
-                            );
-
-                            if (inst.paidPayments >= inst.totalPayments) {
-                              inst.statusEnum = InstallmentStatus.paid;
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Installment fully paid! Moved to History tab. 🎉',
-                                    ),
-                                    backgroundColor: Colors.green,
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              }
-                            } else if (inst.statusEnum ==
-                                    InstallmentStatus.overdue &&
-                                inst.dueDate.isAfter(TimeService.now())) {
-                              inst.statusEnum = InstallmentStatus.active;
-                            }
-                            inst.lastPaidAt =
-                                TimeService.now(); // stamp payment time for billing cycle tracking
-                            await inst.save();
+                        Future<void> pay() async {
+                          final wasLast =
+                              inst.paidPayments + 1 >= inst.totalPayments;
+                          try {
+                            await DatabaseService.recordPayment(inst);
+                          } catch (_) {
+                            return;
                           }
+                          if (wasLast && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Installment fully paid! Moved to History tab. 🎉',
+                                ),
+                                backgroundColor: Colors.green,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                          // The live stream re-emits the updated row on its
+                          // own — no manual setState needed.
                         }
 
-                        if (isAccelerated) {
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () => pay(regularPeriodsToPay),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.black,
-                                    side: BorderSide(color: Colors.grey[300]!),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                  ),
-                                  child: RichText(
-                                    textAlign: TextAlign.center,
-                                    text: TextSpan(
-                                      style: const TextStyle(
-                                        color: Colors.black,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                      children: [
-                                        TextSpan(
-                                          text: regularPeriodsToPay > 1
-                                              ? 'Pay $regularPeriodsToPay Arrears\n'
-                                              : 'Mark ${inst.paymentFrequency == 'Monthly'
-                                                    ? 'Month'
-                                                    : inst.paymentFrequency == 'Quarterly'
-                                                    ? 'Quarter'
-                                                    : inst.paymentFrequency == 'Semi-Annually'
-                                                    ? 'Half-Year'
-                                                    : 'Year'} as Paid\n',
-                                        ),
-                                        TextSpan(
-                                          text:
-                                              '(${currencyFormatter.format(regularTransactionCost)})',
-                                          style: TextStyle(
-                                            color: Colors.grey.shade600,
-                                            fontWeight: FontWeight.normal,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                        return SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: pay,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.black,
+                              side: BorderSide(color: Colors.grey[300]!),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () => pay(fullPeriodsToPay),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: 'Mark ${inst.periodNoun} as Paid\n',
+                                  ),
+                                  TextSpan(
+                                    text:
+                                        '(${currencyFormatter.format(inst.monthlyPayment)})',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.normal,
+                                      fontSize: 11,
                                     ),
                                   ),
-                                  child: RichText(
-                                    textAlign: TextAlign.center,
-                                    text: TextSpan(
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                      children: [
-                                        const TextSpan(
-                                          text: 'Settle Full Debt\n',
-                                        ),
-                                        TextSpan(
-                                          text:
-                                              '(${currencyFormatter.format(fullTransactionCost)})',
-                                          style: TextStyle(
-                                            color: Colors.red.shade100,
-                                            fontWeight: FontWeight.normal,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        } else {
-                          return SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                              onPressed: () => pay(regularPeriodsToPay),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.black,
-                                side: BorderSide(color: Colors.grey[300]!),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                              ),
-                              child: RichText(
-                                textAlign: TextAlign.center,
-                                text: TextSpan(
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                  children: [
-                                    TextSpan(
-                                      text: regularPeriodsToPay > 1
-                                          ? 'Pay $regularPeriodsToPay Arrears\n'
-                                          : 'Mark ${inst.paymentFrequency == 'Monthly'
-                                                ? 'Month'
-                                                : inst.paymentFrequency == 'Quarterly'
-                                                ? 'Quarter'
-                                                : inst.paymentFrequency == 'Semi-Annually'
-                                                ? 'Half-Year'
-                                                : 'Year'} as Paid\n',
-                                    ),
-                                    TextSpan(
-                                      text:
-                                          '(${currencyFormatter.format(regularTransactionCost)})',
-                                      style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontWeight: FontWeight.normal,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                ],
                               ),
                             ),
-                          );
-                        }
+                          ),
+                        );
                       })().popInIf(animate, 2),
                     ],
                   ],

@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:qistiraha/core/services/hive_service.dart';
-import 'package:qistiraha/features/auth/models/user_account.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/services/time_service.dart';
-import 'package:qistiraha/core/engine/affordability_engine.dart';
-import 'package:qistiraha/core/engine/penalty_engine.dart';
-import 'package:qistiraha/features/consumer/models/enums.dart';
-import '../../../widgets/income_edit_bottom_sheet.dart';
+import 'package:qistiraha/core/engine/affordability_live.dart';
 import '../../../widgets/branded_bar_chart_card.dart';
+import 'package:qistiraha/widgets/stream_error_view.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 
 // ---------------------------------------------------------------------------
@@ -68,6 +63,78 @@ class InsightsScreen extends StatefulWidget {
 class _InsightsScreenState extends State<InsightsScreen> {
   String _chartFilter = 'All';
 
+  double _income = 0;
+  int _salaryDay = 1;
+  bool _profileLoaded = false;
+
+  // Created once — see home_screen for why (avoids resubscribe-on-rebuild).
+  // Not `final` so [_retry] can rebuild it after an error.
+  Stream<List<InstallmentRow>> _installmentsStream =
+      DatabaseService.consumerInstallments();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    ProfileFinance p;
+    try {
+      p = await DatabaseService.profileFinance();
+    } catch (_) {
+      p = const ProfileFinance();
+    }
+    if (!mounted) return;
+    setState(() {
+      _income = p.monthlyIncome;
+      _salaryDay = p.salaryDay;
+      _profileLoaded = true;
+    });
+  }
+
+  /// Rebuilds the realtime subscription and re-fetches the profile — wired to
+  /// the Retry button shown when the stream errors.
+  void _retry() {
+    setState(() {
+      _profileLoaded = false;
+      _installmentsStream = DatabaseService.consumerInstallments();
+    });
+    _loadProfile();
+  }
+
+  Future<void> _editIncome() async {
+    final controller = TextEditingController(
+      text: _income > 0 ? _income.toStringAsFixed(0) : '',
+    );
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Monthly Income'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(prefixText: 'EGP ', hintText: '0'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.pop(context, double.tryParse(controller.text)),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await DatabaseService.updateIncome(result, salaryDay: _salaryDay);
+    await _loadProfile();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -80,15 +147,19 @@ class _InsightsScreenState extends State<InsightsScreen> {
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
-      body: ValueListenableBuilder(
-        valueListenable: HiveService.getUserBox().listenable(),
-        builder: (context, Box<UserAccount> box, _) {
-          if (box.isEmpty || box.values.first.installments == null) {
+      body: StreamBuilder<List<InstallmentRow>>(
+        stream: _installmentsStream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return StreamErrorView(onRetry: _retry);
+          }
+          if (!_profileLoaded || !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final installments = snapshot.data ?? const <InstallmentRow>[];
+          if (installments.isEmpty) {
             return const Center(child: Text("No Data for Insights"));
           }
-
-          UserAccount user = box.values.first;
-          var installments = user.installments!;
 
           // Calculate category distribution
           Map<String, double> shortTermTotals = {};
@@ -97,7 +168,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
           double longTermDebt = 0;
 
           for (var inst in installments) {
-            if (inst.statusEnum != InstallmentStatus.paid) {
+            if (!inst.isCompleted) {
               double drain = inst.monthlyPayment;
               if (inst.paymentFrequency == 'Quarterly') {
                 drain /= 3;
@@ -167,59 +238,35 @@ class _InsightsScreenState extends State<InsightsScreen> {
           List<double> buckets = List.filled(numBuckets, 0.0);
 
           for (var inst in installments) {
-            if (inst.statusEnum != InstallmentStatus.paid) {
-              PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
+            if (inst.isCompleted) continue;
 
-              if (pr.isAccelerated) {
-                int remaining = inst.totalPayments - inst.paidPayments;
-                double amount = (remaining * inst.monthlyPayment) + pr.lateFee;
-                if (amount > 0) {
-                  buckets[0] += amount;
-                }
-              } else {
-                int missed = PenaltyEngine.calculateUncappedMissedPeriods(inst);
-                if (missed > 0) {
-                  double amount = (missed * inst.monthlyPayment) + pr.lateFee;
-                  buckets[0] += amount;
-                }
+            // No penalties/acceleration: simply project each remaining
+            // payment forward from its due date by the plan's frequency step.
+            int paymentsAdded = 0;
+            int remainingPayments = inst.totalPayments - inst.paidPayments;
+            DateTime projectedDate = inst.dueDate;
 
-                int paymentsAdded = 0;
-                int remainingPayments = inst.totalPayments - inst.paidPayments;
-                DateTime projectedDate = inst.dueDate;
+            while (paymentsAdded < remainingPayments) {
+              int monthsDiff =
+                  ((projectedDate.year - now.year) * 12) +
+                  projectedDate.month -
+                  now.month;
 
-                // If we missed payments, the next future payment is shifted forward
-                if (missed > 0) {
-                  int monthsToAdvance = missed * inst.monthsPerPayment;
-                  projectedDate = DateTime(
-                    projectedDate.year,
-                    projectedDate.month + monthsToAdvance,
-                    projectedDate.day,
-                  );
-                }
-
-                while (paymentsAdded < remainingPayments) {
-                  int monthsDiff =
-                      ((projectedDate.year - now.year) * 12) +
-                      projectedDate.month -
-                      now.month;
-
-                  int bucketIndex = monthsDiff ~/ stepSize;
-                  if (bucketIndex >= numBuckets) {
-                    break; // Past our dynamic window
-                  }
-
-                  if (bucketIndex >= 0) {
-                    buckets[bucketIndex] += inst.monthlyPayment;
-                  }
-
-                  projectedDate = DateTime(
-                    projectedDate.year,
-                    projectedDate.month + inst.monthsPerPayment,
-                    projectedDate.day,
-                  );
-                  paymentsAdded++;
-                }
+              int bucketIndex = monthsDiff ~/ stepSize;
+              if (bucketIndex >= numBuckets) {
+                break; // Past our dynamic window
               }
+
+              if (bucketIndex >= 0) {
+                buckets[bucketIndex] += inst.monthlyPayment;
+              }
+
+              projectedDate = DateTime(
+                projectedDate.year,
+                projectedDate.month + inst.monthsPerPayment,
+                projectedDate.day,
+              );
+              paymentsAdded++;
             }
           }
 
@@ -235,7 +282,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 const SizedBox(height: 24),
 
                 // ── Affordability Advisor Card ─────────────────────────────
-                _buildAdvisorCard(user, installments.toList()),
+                _buildAdvisorCard(installments),
 
                 const SizedBox(height: 24),
                 CardPopIn(
@@ -273,14 +320,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                               ],
                             ),
                             InkWell(
-                              onTap: () {
-                                showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  builder: (context) =>
-                                      const IncomeEditBottomSheet(),
-                                );
-                              },
+                              onTap: _editIncome,
                               child: Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
@@ -301,27 +341,27 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           builder: (context) {
                             final DateTime now = TimeService.now();
                             final DateRange cycle =
-                                AffordabilityEngine.getCurrentBillingCycle(
-                                  user.salaryDay,
+                                LiveAffordabilityEngine.currentBillingCycle(
+                                  _salaryDay,
                                   now,
                                 );
                             final double owed =
-                                AffordabilityEngine.getOwedInCycle(
-                                  installments.toList(),
+                                LiveAffordabilityEngine.owedInCycle(
+                                  installments,
                                   cycle,
                                 );
                             final double paid =
-                                AffordabilityEngine.getPaidInCycle(
-                                  installments.toList(),
+                                LiveAffordabilityEngine.paidInCycle(
+                                  installments,
                                   cycle,
                                 );
                             final double totalCommitted = owed + paid;
-                            final double income = user.monthlyIncome;
+                            final double income = _income;
                             final double available =
-                                AffordabilityEngine.calculateSafeToSpend(
-                                  installments.toList(),
+                                LiveAffordabilityEngine.safeToSpend(
+                                  installments,
                                   income,
-                                  user.salaryDay,
+                                  _salaryDay,
                                 );
                             final double percentage = income > 0
                                 ? (totalCommitted / income)
@@ -688,32 +728,34 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // ---------------------------------------------------------------------------
   // Affordability Advisor card
   // ---------------------------------------------------------------------------
-  Widget _buildAdvisorCard(UserAccount user, List<Installment> installments) {
+  Widget _buildAdvisorCard(List<InstallmentRow> installments) {
     final format = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
     final DateTime now = TimeService.now();
-    final DateRange cycle = AffordabilityEngine.getCurrentBillingCycle(
-      user.salaryDay,
+    final DateRange cycle = LiveAffordabilityEngine.currentBillingCycle(
+      _salaryDay,
       now,
     );
 
     // Real-time safe-to-spend (resets on incomeDepositDay automatically)
-    final double safeToSpend = AffordabilityEngine.calculateSafeToSpend(
+    final double safeToSpend = LiveAffordabilityEngine.safeToSpend(
       installments,
-      user.monthlyIncome,
-      user.salaryDay,
+      _income,
+      _salaryDay,
     );
 
     // Breakdown for the detail line
-    final double owed = AffordabilityEngine.getOwedInCycle(installments, cycle);
-    final double paid = AffordabilityEngine.getPaidInCycle(installments, cycle);
-    final double usedPct = user.monthlyIncome > 0
-        ? ((owed + paid) / user.monthlyIncome) * 100
-        : 0;
+    final double owed = LiveAffordabilityEngine.owedInCycle(
+      installments,
+      cycle,
+    );
+    final double paid = LiveAffordabilityEngine.paidInCycle(
+      installments,
+      cycle,
+    );
+    final double usedPct = _income > 0 ? ((owed + paid) / _income) * 100 : 0;
 
     // ── Tier evaluation (drives both color and copywriting) ────────────────
-    final double pct = user.monthlyIncome > 0
-        ? (owed + paid) / user.monthlyIncome
-        : 0.0;
+    final double pct = _income > 0 ? (owed + paid) / _income : 0.0;
     final _BudgetStatus status = _getBudgetStatus(pct);
 
     // Emergency override: if safeToSpend goes negative, escalate to critical

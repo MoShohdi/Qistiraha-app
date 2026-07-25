@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/services/time_service.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
+import 'package:qistiraha/features/merchant/widgets/installment_row_compat.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 
@@ -13,7 +14,7 @@ const _kBrandDark = kBrandColorDark;
 /// ring, a projected cash-flow chart, and a top-selling-items ranking —
 /// all derived from the merchant's own active installment plans.
 class MerchantInsightsScreen extends StatelessWidget {
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   final NumberFormat currency;
 
   const MerchantInsightsScreen({
@@ -290,7 +291,7 @@ class _TopItem {
 }
 
 class _ActivityEntry {
-  final Installment installment;
+  final InstallmentRow installment;
   final double amountPaid;
   final DateTime timestamp;
   _ActivityEntry({

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
-import 'package:qistiraha/features/auth/models/business_account.dart';
-import '../models/qist_link_payload.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'qist_link_screen.dart';
 
 /// "Generate Payment Link" screen — the merchant enters the sale details
-/// here and gets a scannable QR / WhatsApp link back on [QistLinkScreen].
+/// here, which creates a real `pending_scan` installment in Supabase, and
+/// gets a scannable QR / WhatsApp link back on [QistLinkScreen].
 class MerchantPortalScreen extends StatefulWidget {
-  final BusinessAccount business;
+  final Business business;
   const MerchantPortalScreen({super.key, required this.business});
 
   @override
@@ -19,24 +18,46 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
   final _assetNameController = TextEditingController();
   final _priceController = TextEditingController();
   final _termsController = TextEditingController();
+  bool _generating = false;
 
-  void _generateQR() {
-    if (_formKey.currentState!.validate()) {
-      final payload = QistLinkPayload(
-        planId: const Uuid().v4(),
-        merchantId: widget.business.id,
-        merchantName: widget.business.businessName,
-        item: _assetNameController.text,
-        price: double.tryParse(_priceController.text) ?? 0.0,
-        months: int.tryParse(_termsController.text) ?? 1,
+  Future<void> _generateQR() async {
+    if (!_formKey.currentState!.validate()) return;
+    final item = _assetNameController.text.trim();
+    final price = double.tryParse(_priceController.text) ?? 0.0;
+    final months = int.tryParse(_termsController.text) ?? 1;
+
+    setState(() => _generating = true);
+    try {
+      // Persist a pending_scan row now; the buyer claims it via the deep link.
+      final id = await DatabaseService.createInstallment(
+        itemDescription: item,
+        totalAmount: price,
+        months: months,
+        merchantName: widget.business.name,
       );
-
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => QistLinkScreen(payload: payload),
+          builder: (context) => QistLinkScreen(
+            link: DatabaseService.deepLinkFor(id),
+            webLink: DatabaseService.webClaimLinkFor(id),
+            item: item,
+            price: price,
+            months: months,
+          ),
         ),
       );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not create the payment link. Try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _generating = false);
     }
   }
 
@@ -131,11 +152,23 @@ class _MerchantPortalScreenState extends State<MerchantPortalScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _generateQR,
-                  icon: const Icon(Icons.qr_code),
-                  label: const Text(
-                    'Generate Qist-Link QR',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  onPressed: _generating ? null : _generateQR,
+                  icon: _generating
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.qr_code),
+                  label: Text(
+                    _generating ? 'Creating…' : 'Generate Qist-Link QR',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E2337),

@@ -1,17 +1,13 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
-import 'package:qistiraha/core/services/hive_service.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/services/time_service.dart';
-import 'package:qistiraha/core/engine/penalty_engine.dart';
-import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:lottie/lottie.dart';
 import 'package:qistiraha/core/utils/card_entrance_animation.dart';
 
 class InstallmentDetailsScreen extends StatefulWidget {
-  final Installment installment;
+  final InstallmentRow installment;
 
   const InstallmentDetailsScreen({super.key, required this.installment});
 
@@ -25,16 +21,111 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     symbol: 'EGP ',
     decimalDigits: 2,
   );
+  // Held in state so mutations (payment, re-plan) can refresh it from Supabase.
+  late InstallmentRow _inst = widget.installment;
   bool _isByDate = true;
   DateTime? _desiredPayoffDate;
   double _newMonthlyPayment = 0.0;
   int _calculatedMonthsToPayoff = 0;
 
+  Future<void> _refresh() async {
+    final updated = await DatabaseService.fetchInstallment(_inst.id);
+    if (updated != null && mounted) setState(() => _inst = updated);
+  }
+
+  bool _uploadingReceipt = false;
+
+  Future<void> _pickAndUploadReceipt(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: source, imageQuality: 80);
+      if (image == null) return;
+      setState(() => _uploadingReceipt = true);
+      final bytes = await image.readAsBytes();
+      await DatabaseService.uploadReceipt(_inst.id, bytes);
+      await _refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload receipt: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingReceipt = false);
+    }
+  }
+
+  void _showReceiptSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Text(
+                'Add Receipt Photo',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadReceipt(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadReceipt(ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _removeReceipt() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Receipt'),
+        content: const Text('Remove this receipt image? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await DatabaseService.removeReceipt(_inst.id);
+    await _refresh();
+  }
+
   void _applyNewPlan() async {
-    widget.installment.monthlyPayment = _newMonthlyPayment;
-    widget.installment.totalMonths =
-        widget.installment.paidMonths + _calculatedMonthsToPayoff;
-    await widget.installment.save(); // Save to Hive
+    await DatabaseService.updatePlanTerms(
+      _inst.id,
+      monthlyPayment: _newMonthlyPayment,
+      totalMonths: _inst.paidMonths + _calculatedMonthsToPayoff,
+    );
+    await _refresh();
 
     setState(() {
       _newMonthlyPayment = 0.0;
@@ -70,15 +161,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     );
 
     if (confirm == true) {
-      final userBox = HiveService.getUserBox();
-      if (userBox.isNotEmpty) {
-        var user = userBox.values.first;
-        user.installments?.remove(widget.installment);
-        await user.save();
-      }
-
-      await widget.installment.delete();
-
+      await DatabaseService.deleteInstallment(_inst.id);
       if (mounted) {
         Navigator.push(
           context,
@@ -93,9 +176,8 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
   void _calculateEarlyPayoff() {
     if (_desiredPayoffDate == null) return;
 
-    int remainingMonths =
-        widget.installment.totalMonths - widget.installment.paidMonths;
-    double remainingDebt = remainingMonths * widget.installment.monthlyPayment;
+    int remainingMonths = _inst.totalMonths - _inst.paidMonths;
+    double remainingDebt = remainingMonths * _inst.monthlyPayment;
 
     // Calculate months between now and desired payoff date
     int monthsToPayoff =
@@ -125,76 +207,10 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     }
   }
 
-  Future<void> _pickWarrantyImage(ImageSource source) async {
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: source);
-      if (image != null) {
-        widget.installment.warrantyImagePath = image.path;
-        await widget.installment.save();
-        setState(() {});
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to pick image: $e')));
-      }
-    }
-  }
-
-  void _showImageSourceDialog() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text(
-                  'Add Warranty Photo',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_outlined),
-                title: const Text('Take a Photo'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickWarrantyImage(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Choose from Gallery'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickWarrantyImage(ImageSource.gallery);
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    int remainingMonths =
-        widget.installment.totalMonths - widget.installment.paidMonths;
-    double remainingDebt = remainingMonths * widget.installment.monthlyPayment;
-    PenaltyResult penaltyResult = PenaltyEngine.calculateLateFees(
-      widget.installment,
-    );
-    remainingDebt += penaltyResult.lateFee;
+    int remainingMonths = _inst.totalMonths - _inst.paidMonths;
+    double remainingDebt = remainingMonths * _inst.monthlyPayment;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -206,7 +222,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          widget.installment.merchantName,
+          _inst.merchantName,
           style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -223,28 +239,26 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            _buildAmountCard('TOTAL AMOUNT', widget.installment.amount),
+            _buildAmountCard('TOTAL AMOUNT', _inst.totalAmount),
             const SizedBox(height: 16),
             _buildRemainingDebtCard(remainingDebt),
             const SizedBox(height: 16),
             _buildDebtPaidCard(),
             const SizedBox(height: 16),
-            _buildMonthlyPaymentCard(penaltyResult),
+            _buildMonthlyPaymentCard(),
             const SizedBox(height: 16),
-            _buildWarrantyCard(),
+            _buildReceiptCard(),
             const SizedBox(height: 24),
             _buildPaymentHistory(),
             const SizedBox(height: 24),
-            if (widget.installment.statusEnum != InstallmentStatus.paid) ...[
+            if (!_inst.isCompleted) ...[
               _buildEarlyPayoffCalculator(),
               const SizedBox(height: 24),
             ],
-            // A merchant-linked contract belongs to the merchant's ledger
-            // too — only the merchant can cancel it (from their own
-            // Installment Details screen). The consumer may still delete
-            // installments they tracked manually themselves.
-            if (widget.installment.merchantId == null ||
-                widget.installment.merchantId!.isEmpty)
+            // A merchant-issued plan can only be cancelled by that merchant.
+            // A self-added plan (merchant_id == the current user) is deletable
+            // here.
+            if (_inst.merchantId == DatabaseService.currentUserId)
               SizedBox(
                 width: double.infinity,
                 child: TextButton(
@@ -338,34 +352,16 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (widget.installment.totalPayments <= 20)
+            if (_inst.totalPayments <= 20)
               Row(
-                children: List.generate(widget.installment.totalPayments, (
-                  index,
-                ) {
-                  int paidSegments = widget.installment.paidPayments;
-                  int totalSegments = widget.installment.totalPayments;
-                  int redSegments = 0;
+                children: List.generate(_inst.totalPayments, (index) {
+                  int paidSegments = _inst.paidPayments;
+                  int totalSegments = _inst.totalPayments;
 
-                  PenaltyResult pr = PenaltyEngine.calculateLateFees(
-                    widget.installment,
-                  );
-                  if (pr.isAccelerated) {
-                    redSegments = totalSegments - paidSegments;
-                  } else {
-                    redSegments = PenaltyEngine.calculateUncappedMissedPeriods(
-                      widget.installment,
-                    );
-                    if (redSegments > (totalSegments - paidSegments)) {
-                      redSegments = totalSegments - paidSegments;
-                    }
-                  }
-
+                  // No penalties: segments are simply paid vs. remaining.
                   Color segmentColor;
                   if (index < paidSegments) {
                     segmentColor = Theme.of(context).primaryColor;
-                  } else if (index < paidSegments + redSegments) {
-                    segmentColor = Colors.red;
                   } else {
                     segmentColor = Colors.grey[200]!;
                   }
@@ -388,9 +384,8 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: widget.installment.totalPayments > 0
-                      ? widget.installment.paidPayments /
-                            widget.installment.totalPayments
+                  value: _inst.totalPayments > 0
+                      ? _inst.paidPayments / _inst.totalPayments
                       : 0.0,
                   backgroundColor: Colors.grey[200],
                   color: Theme.of(context).primaryColor,
@@ -401,7 +396,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: Text(
-                '${widget.installment.paidPayments} of ${widget.installment.totalPayments} paid',
+                '${_inst.paidPayments} of ${_inst.totalPayments} paid',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ),
@@ -412,22 +407,16 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
   }
 
   Widget _buildDebtPaidCard() {
-    double totalPaid = widget.installment.pastPayments.fold(
-      0.0,
-      (sum, p) => sum + p,
-    );
-    double totalPenalty = widget.installment.pastPayments.fold(0.0, (sum, p) {
+    double totalPaid = _inst.pastPayments.fold(0.0, (sum, p) => sum + p);
+    double totalPenalty = _inst.pastPayments.fold(0.0, (sum, p) {
       return sum +
-          (p > widget.installment.monthlyPayment
-              ? (p - widget.installment.monthlyPayment)
-              : 0.0);
+          (p > _inst.monthlyPayment ? (p - _inst.monthlyPayment) : 0.0);
     });
     double totalRegular = totalPaid - totalPenalty;
 
     // Fallback if no pastPayments stored (for legacy test data)
-    if (totalPaid == 0 && widget.installment.paidMonths > 0) {
-      totalPaid =
-          widget.installment.paidMonths * widget.installment.monthlyPayment;
+    if (totalPaid == 0 && _inst.paidMonths > 0) {
+      totalPaid = _inst.paidMonths * _inst.monthlyPayment;
       totalRegular = totalPaid;
     }
 
@@ -504,7 +493,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                   ),
                 if (penaltyRatio == 0) const SizedBox(),
                 Text(
-                  '${widget.installment.paidPayments} of ${widget.installment.totalPayments} paid',
+                  '${_inst.paidPayments} of ${_inst.totalPayments} paid',
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
               ],
@@ -515,9 +504,8 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     );
   }
 
-  Widget _buildMonthlyPaymentCard(PenaltyResult penaltyResult) {
-    double lateFee = penaltyResult.lateFee;
-    bool isAccelerated = penaltyResult.isAccelerated;
+  Widget _buildMonthlyPaymentCard() {
+    final bool isOverdue = _inst.isOverdue;
 
     return CardPopIn(
       id: 'details-monthly-payment-card',
@@ -527,41 +515,15 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isAccelerated ? Colors.red : Colors.grey[200]!,
-            width: isAccelerated ? 2 : 1,
-          ),
+          border: Border.all(color: Colors.grey[200]!),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isAccelerated) ...[
-              const Row(
-                children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: Colors.red,
-                    size: 20,
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '⚠️ DEFAULT STATUS: ENTIRE BALANCE DUE',
-                      style: TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
             Row(
               children: [
                 Text(
-                  widget.installment.paymentFrequencyLabel.toUpperCase(),
+                  _inst.paymentFrequencyLabel.toUpperCase(),
                   style: const TextStyle(
                     color: Colors.black87,
                     fontSize: 12,
@@ -591,287 +553,66 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            if (lateFee > 0 && !isAccelerated)
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  currencyFormatter.format(
-                    widget.installment.monthlyPayment *
-                        PenaltyEngine.calculateMissedMonths(widget.installment),
-                  ),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey,
-                    decoration: TextDecoration.lineThrough,
-                  ),
-                ),
-              ),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                currencyFormatter.format(
-                  isAccelerated
-                      ? ((widget.installment.totalPayments -
-                                widget.installment.paidPayments) *
-                            widget.installment.monthlyPayment)
-                      : widget.installment.statusEnum ==
-                            InstallmentStatus.overdue
-                      ? (widget.installment.monthlyPayment *
-                            PenaltyEngine.calculateUncappedMissedPeriods(
-                              widget.installment,
-                            ))
-                      : widget.installment.monthlyPayment,
-                ),
+                currencyFormatter.format(_inst.monthlyPayment),
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color:
-                      widget.installment.statusEnum == InstallmentStatus.overdue
-                      ? Colors.red
-                      : Colors.black,
+                  color: isOverdue ? Colors.red : Colors.black,
                 ),
               ),
             ),
-            if (widget.installment.statusEnum == InstallmentStatus.overdue)
-              Padding(
-                padding: const EdgeInsets.only(top: 4, bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.redAccent,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Please contact your lender for late fees details.',
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        softWrap: true,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             const SizedBox(height: 8),
             Row(
               children: [
                 const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  'Due ${widget.installment.dueDate.day}th of ${widget.installment.paymentCadencePhrase}',
+                  'Due ${_inst.dueDate.day}th of ${_inst.paymentCadencePhrase}',
                   style: TextStyle(color: Colors.grey[600], fontSize: 13),
                 ),
               ],
             ),
-            if (widget.installment.statusEnum != InstallmentStatus.paid) ...[
+            if (!_inst.isCompleted) ...[
               const SizedBox(height: 20),
-              (() {
-                int regularPeriodsToPay =
-                    PenaltyEngine.calculateActualPeriodsToPay(
-                      widget.installment,
-                    );
-                if (widget.installment.paidPayments + regularPeriodsToPay >
-                    widget.installment.totalPayments) {
-                  regularPeriodsToPay =
-                      widget.installment.totalPayments -
-                      widget.installment.paidPayments;
-                }
-                double regularTransactionCost =
-                    (widget.installment.monthlyPayment * regularPeriodsToPay) +
-                    lateFee;
-
-                int fullPeriodsToPay =
-                    widget.installment.totalPayments -
-                    widget.installment.paidPayments;
-                double fullTransactionCost =
-                    (widget.installment.monthlyPayment * fullPeriodsToPay) +
-                    lateFee;
-
-                Future<void> pay(int periodsToPay) async {
-                  if (widget.installment.paidPayments <
-                      widget.installment.totalPayments) {
-                    double evenlyDistributedPenalty = lateFee / periodsToPay;
-                    for (int i = 0; i < periodsToPay; i++) {
-                      widget.installment.pastPayments =
-                          List.from(widget.installment.pastPayments)..add(
-                            widget.installment.monthlyPayment +
-                                evenlyDistributedPenalty,
-                          );
-                    }
-
-                    int monthsToAdvance =
-                        periodsToPay * widget.installment.monthsPerPayment;
-                    widget.installment.paidMonths += monthsToAdvance;
-                    widget.installment.dueDate = DateTime(
-                      widget.installment.dueDate.year,
-                      widget.installment.dueDate.month + monthsToAdvance,
-                      widget.installment.dueDate.day,
-                    );
-
-                    if (widget.installment.paidPayments >=
-                        widget.installment.totalPayments) {
-                      widget.installment.statusEnum = InstallmentStatus.paid;
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Installment fully paid! Moved to History tab. 🎉',
-                            ),
-                            backgroundColor: Colors.green,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                        Navigator.pop(
-                          context,
-                        ); // Go back to home to see the animation/result
-                      }
-                    } else if (widget.installment.statusEnum ==
-                            InstallmentStatus.overdue &&
-                        widget.installment.dueDate.isAfter(TimeService.now())) {
-                      widget.installment.statusEnum = InstallmentStatus.active;
-                    }
-                    widget.installment.lastPaidAt =
-                        TimeService.now(); // stamp payment time for billing cycle tracking
-                    await widget.installment.save();
-                    setState(() {});
-                  }
-                }
-
-                if (isAccelerated) {
-                  return Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => pay(regularPeriodsToPay),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black,
-                            side: BorderSide(color: Colors.grey[300]!),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          child: RichText(
-                            textAlign: TextAlign.center,
-                            text: TextSpan(
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: regularPeriodsToPay > 1
-                                      ? 'Pay $regularPeriodsToPay Arrears\n'
-                                      : 'Mark ${widget.installment.periodNoun} as Paid\n',
-                                ),
-                                TextSpan(
-                                  text:
-                                      '(${currencyFormatter.format(regularTransactionCost)})',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontWeight: FontWeight.normal,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => pay(fullPeriodsToPay),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          child: RichText(
-                            textAlign: TextAlign.center,
-                            text: TextSpan(
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                              children: [
-                                const TextSpan(text: 'Settle Full Debt\n'),
-                                TextSpan(
-                                  text:
-                                      '(${currencyFormatter.format(fullTransactionCost)})',
-                                  style: TextStyle(
-                                    color: Colors.red.shade100,
-                                    fontWeight: FontWeight.normal,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                } else {
-                  return SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () => pay(regularPeriodsToPay),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black,
-                        side: BorderSide(color: Colors.grey[300]!),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: RichText(
-                        textAlign: TextAlign.center,
-                        text: TextSpan(
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: regularPeriodsToPay > 1
-                                  ? 'Pay $regularPeriodsToPay Arrears\n'
-                                  : 'Mark ${widget.installment.paymentFrequency == 'Monthly'
-                                        ? 'Month'
-                                        : widget.installment.paymentFrequency == 'Quarterly'
-                                        ? 'Quarter'
-                                        : widget.installment.paymentFrequency == 'Semi-Annually'
-                                        ? 'Half-Year'
-                                        : 'Year'} as Paid\n',
-                            ),
-                            TextSpan(
-                              text:
-                                  '(${currencyFormatter.format(regularTransactionCost)})',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontWeight: FontWeight.normal,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _markOnePeriodPaid,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.black,
+                    side: BorderSide(color: Colors.grey[300]!),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  );
-                }
-              })(),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: RichText(
+                    textAlign: TextAlign.center,
+                    text: TextSpan(
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      children: [
+                        TextSpan(text: 'Mark ${_inst.periodNoun} as Paid\n'),
+                        TextSpan(
+                          text:
+                              '(${currencyFormatter.format(_inst.monthlyPayment)})',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.normal,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ],
           ],
         ).popInIf(animate, 0),
@@ -879,9 +620,43 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     );
   }
 
-  Widget _buildWarrantyCard() {
+  /// Records a single on-time period payment. No penalties, no arrears
+  /// bundling — one tap advances the plan by exactly one payment period.
+  Future<void> _markOnePeriodPaid() async {
+    if (_inst.paidPayments >= _inst.totalPayments) return;
+    final wasLast = _inst.paidPayments + 1 >= _inst.totalPayments;
+
+    try {
+      await DatabaseService.recordPayment(_inst);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not record payment.')),
+        );
+      }
+      return;
+    }
+
+    if (wasLast) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Installment fully paid! Moved to History tab. 🎉'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
+    await _refresh();
+  }
+
+  Widget _buildReceiptCard() {
+    final url = _inst.receiptImageUrl;
     return CardPopIn(
-      id: 'details-warranty-card',
+      id: 'details-receipt-card',
       builder: (context, animate) => Container(
         width: double.infinity,
         padding: const EdgeInsets.all(24),
@@ -903,9 +678,16 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (widget.installment.warrantyImagePath == null)
+            if (_uploadingReceipt)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (url == null)
               GestureDetector(
-                onTap: _showImageSourceDialog,
+                onTap: _showReceiptSourceDialog,
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 24),
@@ -923,7 +705,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Tap to add warranty photo',
+                        'Tap to add receipt photo',
                         style: TextStyle(color: Colors.grey[600], fontSize: 14),
                       ),
                     ],
@@ -935,11 +717,17 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.file(
-                      File(widget.installment.warrantyImagePath!),
+                    child: Image.network(
+                      url,
                       width: 80,
                       height: 80,
                       fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        width: 80,
+                        height: 80,
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.broken_image_outlined),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -948,7 +736,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Document Saved',
+                          'Receipt saved',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
@@ -959,48 +747,38 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => Dialog(
-                                      insetPadding: const EdgeInsets.all(16),
-                                      child: Stack(
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              16,
+                                onPressed: () => showDialog(
+                                  context: context,
+                                  builder: (context) => Dialog(
+                                    insetPadding: const EdgeInsets.all(16),
+                                    child: Stack(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(16),
+                                          child: Image.network(url),
+                                        ),
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: IconButton(
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: Colors.white,
+                                              shadows: [
+                                                Shadow(
+                                                  color: Colors.black45,
+                                                  blurRadius: 4,
+                                                ),
+                                              ],
                                             ),
-                                            child: Image.file(
-                                              File(
-                                                widget
-                                                    .installment
-                                                    .warrantyImagePath!,
-                                              ),
-                                            ),
+                                            onPressed: () =>
+                                                Navigator.pop(context),
                                           ),
-                                          Positioned(
-                                            top: 8,
-                                            right: 8,
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.close,
-                                                color: Colors.white,
-                                                shadows: [
-                                                  Shadow(
-                                                    color: Colors.black45,
-                                                    blurRadius: 4,
-                                                  ),
-                                                ],
-                                              ),
-                                              onPressed: () =>
-                                                  Navigator.pop(context),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
-                                  );
-                                },
+                                  ),
+                                ),
                                 icon: const Icon(
                                   Icons.fullscreen,
                                   size: 16,
@@ -1024,45 +802,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  bool? confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text(
-                                        'Remove Warranty Document',
-                                      ),
-                                      content: const Text(
-                                        'Are you sure you want to remove this image? This action cannot be undone.',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, false),
-                                          child: const Text(
-                                            'Cancel',
-                                            style: TextStyle(
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ),
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, true),
-                                          child: const Text(
-                                            'Remove',
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-
-                                  if (confirm == true) {
-                                    widget.installment.warrantyImagePath = null;
-                                    await widget.installment.save();
-                                    setState(() {});
-                                  }
-                                },
+                                onPressed: _removeReceipt,
                                 icon: const Icon(
                                   Icons.delete_outline,
                                   size: 16,
@@ -1098,7 +838,7 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
 
   Widget _buildPaymentHistory() {
     List<Widget> historyItems = [];
-    final inst = widget.installment;
+    final inst = _inst;
 
     // One node per payment PERIOD, not per month — a 12-month Semi-Annual
     // plan shows 2 nodes, not 12. Amounts are the per-period chunk stored in
@@ -1106,22 +846,17 @@ class _InstallmentDetailsScreenState extends State<InstallmentDetailsScreen> {
     // is itself one entry per period), and dates step by whole frequency
     // chunks via [dueDateForPeriodsBack].
 
-    // Add upcoming payment (next unpaid period).
+    // Add upcoming payment (next unpaid period). No late fee is ever added.
     if (inst.paidPayments < inst.totalPayments) {
-      double upcomingAmount = inst.monthlyPayment;
-      PenaltyResult pr = PenaltyEngine.calculateLateFees(inst);
-      double lateFee = pr.lateFee;
-      upcomingAmount += lateFee;
-
       historyItems.add(
         _buildHistoryItem(
           'Payment ${inst.paidPayments + 1}',
           inst.dueDate,
-          upcomingAmount,
-          lateFee > 0 ? 'LATE' : 'UPCOMING',
-          lateFee > 0 ? Colors.red[50]! : Colors.grey[200]!,
-          lateFee > 0 ? Colors.red : Colors.black,
-          lateFee > 0 ? Icons.warning_amber_rounded : Icons.access_time,
+          inst.monthlyPayment,
+          'UPCOMING',
+          Colors.grey[200]!,
+          Colors.black,
+          Icons.access_time,
         ),
       );
       if (inst.paidPayments > 0) {

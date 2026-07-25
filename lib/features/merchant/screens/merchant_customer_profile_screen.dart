@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/features/merchant/widgets/merchant_plan_row.dart';
 import 'merchant_installment_details_screen.dart';
 
@@ -14,7 +14,7 @@ const _kBg = Color(0xFFF8F9FA);
 class MerchantCustomerProfileScreen extends StatelessWidget {
   final String customerName;
   final String? customerPhone;
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   final NumberFormat currency;
 
   const MerchantCustomerProfileScreen({

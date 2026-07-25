@@ -1,104 +1,142 @@
-import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
-import '../../../core/services/mock_data_service.dart';
-import '../../../core/services/mock_merchant_data_service.dart';
-import '../../../core/services/hive_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/user_role.dart';
+import '../../../core/services/database_service.dart';
 
+/// Where the app should land right now: not authenticated, authenticated
+/// but yet to pick Consumer/Merchant, or ready for a specific dashboard.
+/// Returned by [AuthService.resolveDestination] and consumed by
+/// `destinationScreen()` in `main.dart`.
+enum AuthDestination { loggedOut, rolePicker, consumerHome, merchantHome }
+
+/// Supabase-backed authentication (email/password + Google OAuth).
+///
+/// This is now the ONLY source of identity/role — there is no local Hive
+/// mirror of the account any more, and no mock-data seeding. Session state
+/// lives in `supabase_flutter`'s persisted client; role lives in
+/// `public.profiles.role` (see `supabase/schema.sql`). Installment data is
+/// read live from Supabase via `DatabaseService`, never from Hive.
 class AuthService {
-  static const String _userIdKey = 'qistiraha_user_id';
-  static const String _roleKey = 'qistiraha_role';
+  static SupabaseClient get _client => Supabase.instance.client;
 
-  /// Checks if there is a saved active user session.
-  static Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.containsKey(_userIdKey);
-  }
+  static User? get currentUser => _client.auth.currentUser;
+  static bool get hasActiveSession => _client.auth.currentSession != null;
+  static Stream<AuthState> get authStateChanges =>
+      _client.auth.onAuthStateChange;
 
-  /// The role the current session logged in as. Defaults to consumer.
-  static Future<UserRole> getRole() async {
-    final prefs = await SharedPreferences.getInstance();
-    return UserRole.fromRaw(prefs.getString(_roleKey));
-  }
+  // ---------------------------------------------------------------------------
+  // Email / password
+  // ---------------------------------------------------------------------------
 
-  /// Signs the user out by wiping the session ID.
-  static Future<void> signOut() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_userIdKey);
-    await prefs.remove(_roleKey);
-  }
-
-  /// Authenticates with Email & Password.
-  /// If kDebugMode is true, this automatically bypasses real auth.
-  static Future<bool> signInWithEmail(
-    String email,
-    String password, {
-    required UserRole role,
-  }) async {
-    if (kDebugMode) {
-      // DEVELOPMENT BYPASS
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_userIdKey, 'dev_bypass_user_id');
-      await prefs.setString(_roleKey, role.raw);
-
-      await _seedMockDataFor(role);
-      return true;
-    } else {
-      // TODO: Integrate Firebase/Supabase here for Beta
-      // e.g., await supabase.auth.signInWithPassword(email: email, password: password);
-
-      return false; // Not implemented for prod yet
+  /// Returns `null` on success, or a user-facing error message on failure.
+  static Future<String?> signInWithEmail(String email, String password) async {
+    try {
+      await _client.auth.signInWithPassword(
+        email: email.trim(),
+        password: password,
+      );
+      return null;
+    } on AuthException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Something went wrong. Please try again.';
     }
   }
 
-  /// Creates a new account.
-  /// If kDebugMode is true, this automatically bypasses real auth.
-  static Future<bool> signUpWithEmail(
+  /// Returns `null` on success, or a user-facing error message on failure.
+  /// A `null` return does not guarantee an active session — if the Supabase
+  /// project requires email confirmation, [hasActiveSession] will still be
+  /// false right after this resolves; the caller should check it and prompt
+  /// the user to confirm their email before signing in.
+  static Future<String?> signUpWithEmail(
     String name,
     String email,
-    String password, {
-    required UserRole role,
-  }) async {
-    if (kDebugMode) {
-      // DEVELOPMENT BYPASS
-      final prefs = await SharedPreferences.getInstance();
-      var uuid = const Uuid().v4();
-      await prefs.setString(_userIdKey, uuid);
-      await prefs.setString(_roleKey, role.raw);
-
-      await _seedMockDataFor(role, name: name);
-      return true;
-    } else {
-      // TODO: Integrate Firebase/Supabase here for Beta
-      // e.g., await supabase.auth.signUp(email: email, password: password);
-
-      return false; // Not implemented for prod yet
+    String password,
+  ) async {
+    try {
+      await _client.auth.signUp(
+        email: email.trim(),
+        password: password,
+        data: {'full_name': name},
+      );
+      return null;
+    } on AuthException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Something went wrong. Please try again.';
     }
   }
 
-  static Future<void> _seedMockDataFor(UserRole role, {String? name}) async {
+  // ---------------------------------------------------------------------------
+  // Google OAuth
+  // ---------------------------------------------------------------------------
+
+  /// Launches Supabase's browser-based Google OAuth flow. On web this
+  /// navigates the current tab away (the app reloads on return, and boot
+  /// re-resolves the new session); on mobile it opens the system browser
+  /// and control returns via the `qistiraha://login-callback` deep link,
+  /// which `supabase_flutter` completes internally. Completion is always
+  /// reported asynchronously via [authStateChanges], never by this call.
+  static Future<bool> signInWithGoogle() {
+    return _client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: kIsWeb ? null : 'qistiraha://login-callback',
+      authScreenLaunchMode: kIsWeb
+          ? LaunchMode.platformDefault
+          : LaunchMode.externalApplication,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Session / role resolution
+  // ---------------------------------------------------------------------------
+
+  static Future<void> signOut() {
+    // Tear down session-scoped data caches (e.g. the shared merchant realtime
+    // subscription) so the next user doesn't inherit a stale stream.
+    DatabaseService.resetSession();
+    return _client.auth.signOut();
+  }
+
+  /// Persists the chosen role on `profiles`. Called exactly once per
+  /// identity, from the Role Picker. When the user picks Merchant, this also
+  /// provisions their `businesses` storefront row so the merchant dashboard
+  /// has data to read immediately (no more "No merchant account found").
+  static Future<void> completeRole(UserRole role) async {
+    final user = currentUser;
+    if (user == null) throw StateError('No authenticated user.');
+    await _client
+        .from('profiles')
+        .update({'role': role.raw})
+        .eq('id', user.id);
     if (role == UserRole.merchant) {
-      final userBox = HiveService.getUserBox();
-      // Seed the base consumer identity first if needed — MockDataService
-      // clears the installment box, so it must run *before* the merchant
-      // installments are added below, never after.
-      if (userBox.isEmpty) {
-        await MockDataService.populateMockData();
-      }
-      final business = await MockMerchantDataService.populateMockData();
-      final user = userBox.values.first;
-      user.role = UserRole.merchant.raw;
-      user.businessId = business.id;
-      if (name != null && name.isNotEmpty) user.name = name;
-      await user.save();
-    } else {
-      await MockDataService.populateMockData();
-      final userBox = HiveService.getUserBox();
-      final user = userBox.values.first;
-      user.role = UserRole.consumer.raw;
-      if (name != null && name.isNotEmpty) user.name = name;
-      await user.save();
+      await DatabaseService.ensureBusiness();
     }
+  }
+
+  /// The single place that decides what the app should show for the current
+  /// Supabase session — called once at boot and again by the root
+  /// `onAuthStateChange` listener after every live sign-in. Role comes
+  /// straight from `public.profiles`; a null role means the identity hasn't
+  /// picked Consumer/Merchant yet.
+  static Future<AuthDestination> resolveDestination() async {
+    final user = currentUser;
+    if (user == null) return AuthDestination.loggedOut;
+
+    final role = await _fetchRole(user.id);
+    if (role == null) return AuthDestination.rolePicker;
+    return role == UserRole.merchant
+        ? AuthDestination.merchantHome
+        : AuthDestination.consumerHome;
+  }
+
+  static Future<UserRole?> _fetchRole(String authUserId) async {
+    final row = await _client
+        .from('profiles')
+        .select('role')
+        .eq('id', authUserId)
+        .maybeSingle();
+    final raw = row?['role'] as String?;
+    return raw == null ? null : UserRole.fromRaw(raw);
   }
 }

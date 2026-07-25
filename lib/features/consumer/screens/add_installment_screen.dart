@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/services/time_service.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import '../controllers/add_installment_controller.dart';
 import '../models/installment.dart';
 
@@ -165,11 +166,12 @@ class _InstallmentFormViewState extends State<_InstallmentFormView> {
 
         // _installmentsController holds the number of PAYMENT PERIODS at the
         // selected frequency (e.g. "8" quarters), not raw calendar months —
-        // convert to real total months here so Installment.totalMonths /
-        // monthsPerPayment yields back that same period count everywhere
-        // else (payment timeline, progress bars, remaining-debt math).
-        await _controller.saveInstallment(
-          storeName: _storeNameController.text.isNotEmpty
+        // convert to real total months so totalMonths / monthsPerPayment
+        // yields back that same period count everywhere else. Writes straight
+        // to Supabase (merchant_id == consumer_id == the current user), so it
+        // appears on the consumer stream instantly. No Hive.
+        await DatabaseService.addSelfInstallment(
+          merchantName: _storeNameController.text.isNotEmpty
               ? _storeNameController.text
               : (_selectedProvider ?? 'Unknown Store'),
           itemDescription: _itemDescController.text,

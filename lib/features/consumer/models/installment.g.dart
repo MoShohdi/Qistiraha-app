@@ -30,9 +30,8 @@ class InstallmentAdapter extends TypeAdapter<Installment> {
       interestRate: fields[10] as double,
       category: fields[11] as String,
       lender: fields[12] == null ? 'Other' : fields[12] as String,
-      pastPayments: fields[13] == null
-          ? []
-          : (fields[13] as List).cast<double>(),
+      pastPayments:
+          fields[13] == null ? [] : (fields[13] as List).cast<double>(),
       warrantyImagePath: fields[14] as String?,
       lastPaidAt: fields[15] as DateTime?,
       isLongTerm: fields[16] == null ? false : fields[16] as bool,

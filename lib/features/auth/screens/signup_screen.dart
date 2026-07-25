@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
-import '../models/user_role.dart';
-import '../widgets/role_toggle.dart';
-import '../../merchant/screens/merchant_dashboard_screen.dart';
-import '../../../main.dart';
+import '../widgets/google_sign_in_button.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -17,9 +14,11 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  bool _isLoading = false;
+  bool _isEmailLoading = false;
+  bool _isGoogleLoading = false;
   bool _obscureText = true;
-  UserRole _selectedRole = UserRole.consumer;
+
+  bool get _busy => _isEmailLoading || _isGoogleLoading;
 
   Future<void> _handleSignup() async {
     if (_passwordController.text != _confirmPasswordController.text) {
@@ -29,31 +28,56 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => _isEmailLoading = true);
 
-    // Attempt signup (bypasses in kDebugMode)
-    bool success = await AuthService.signUpWithEmail(
+    final error = await AuthService.signUpWithEmail(
       _nameController.text,
       _emailController.text,
       _passwordController.text,
-      role: _selectedRole,
     );
 
-    setState(() => _isLoading = false);
+    if (!mounted) return;
 
-    if (success && mounted) {
-      Navigator.pushAndRemoveUntil(
+    if (error != null) {
+      setState(() => _isEmailLoading = false);
+      ScaffoldMessenger.of(
         context,
-        MaterialPageRoute(
-          builder: (_) => _selectedRole == UserRole.merchant
-              ? const MerchantDashboardScreen()
-              : const MainNavigation(),
-        ),
-        (route) => false,
-      );
-    } else if (mounted) {
+      ).showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+
+    if (!AuthService.hasActiveSession) {
+      // Email confirmation is required by the Supabase project settings —
+      // there's no session yet, so there's nothing for the root listener
+      // to react to. Tell the user what to do next.
+      setState(() => _isEmailLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Signup failed. Please try again.')),
+        const SnackBar(
+          content: Text('Check your email to confirm your account, then sign in.'),
+        ),
+      );
+      return;
+    }
+
+    // Session is live — leave _isEmailLoading true. The root listener will
+    // fetch the (brand-new, still-null) role and route to the Role Picker.
+  }
+
+  Future<void> _handleGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    bool launched = false;
+    try {
+      launched = await AuthService.signInWithGoogle();
+    } catch (_) {
+      launched = false;
+    }
+    if (!mounted) return;
+    setState(() => _isGoogleLoading = false);
+    if (!launched) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not start Google sign-in. Please try again.'),
+        ),
       );
     }
   }
@@ -87,11 +111,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 24),
-              RoleToggle(
-                selected: _selectedRole,
-                onChanged: (role) => setState(() => _selectedRole = role),
-              ),
-              const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -118,6 +137,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _nameController,
+                      enabled: !_busy,
                       decoration: InputDecoration(
                         hintText: 'John Doe',
                         prefixIcon: const Icon(Icons.person_outline),
@@ -138,6 +158,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
+                      enabled: !_busy,
                       decoration: InputDecoration(
                         hintText: 'name@example.com',
                         prefixIcon: const Icon(Icons.email_outlined),
@@ -158,6 +179,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscureText,
+                      enabled: !_busy,
                       decoration: InputDecoration(
                         hintText: '••••••••',
                         prefixIcon: const Icon(Icons.lock_outline),
@@ -187,6 +209,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     TextFormField(
                       controller: _confirmPasswordController,
                       obscureText: _obscureText,
+                      enabled: !_busy,
                       decoration: InputDecoration(
                         hintText: '••••••••',
                         prefixIcon: const Icon(Icons.lock_outline),
@@ -200,7 +223,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _isLoading ? null : _handleSignup,
+                        onPressed: _busy ? null : _handleSignup,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.black,
                           foregroundColor: Colors.white,
@@ -208,7 +231,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: _isLoading
+                        child: _isEmailLoading
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
@@ -225,6 +248,13 @@ class _SignupScreenState extends State<SignupScreen> {
                                 ),
                               ),
                       ),
+                    ),
+                    const SizedBox(height: 20),
+                    const AuthDivider(),
+                    const SizedBox(height: 20),
+                    GoogleSignInButton(
+                      onPressed: _busy ? null : _handleGoogle,
+                      isLoading: _isGoogleLoading,
                     ),
                   ],
                 ),

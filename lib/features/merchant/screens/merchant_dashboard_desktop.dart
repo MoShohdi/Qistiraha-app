@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:qistiraha/core/services/hive_service.dart';
+import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/services/time_service.dart';
 import 'package:qistiraha/core/utils/responsive_layout.dart';
-import 'package:qistiraha/features/auth/models/business_account.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
 import 'package:qistiraha/features/auth/screens/login_screen_desktop.dart';
-import 'package:qistiraha/features/consumer/models/installment.dart';
 import 'package:qistiraha/features/consumer/models/enums.dart';
+import 'package:qistiraha/features/merchant/widgets/installment_row_compat.dart';
 import 'merchant_customer_profile_screen.dart';
 import 'merchant_installment_details_desktop.dart';
 import 'merchant_portal_desktop.dart';
@@ -60,7 +58,25 @@ class _MerchantDashboardDesktopState extends State<MerchantDashboardDesktop> {
   final _currency = NumberFormat.currency(symbol: 'EGP ', decimalDigits: 0);
   _MerchantNav _nav = _MerchantNav.overview;
   String? _selectedCustomerKey;
-  Installment? _selectedInstallment;
+  InstallmentRow? _selectedInstallment;
+
+  // Locked to this State's lifetime in initState() so no rebuild (hover,
+  // LayoutBuilder metrics change, FutureBuilder completion) ever recreates the
+  // stream and flaps it back to empty. Backed by DatabaseService's session
+  // cache, so even a full remount replays the last snapshot instantly.
+  late final Stream<List<InstallmentRow>> _plansStream;
+  late final Future<Business?> _businessFuture;
+
+  // Last non-null plan list seen. Retained so a transient rebuild where the
+  // snapshot is momentarily without data does NOT wipe the dashboard to zero.
+  List<InstallmentRow> _lastPlans = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _plansStream = DatabaseService.merchantInstallments();
+    _businessFuture = DatabaseService.merchantBusiness();
+  }
 
   Future<void> _logout(BuildContext context) async {
     await AuthService.signOut();
@@ -80,25 +96,36 @@ class _MerchantDashboardDesktopState extends State<MerchantDashboardDesktop> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder(
-      valueListenable: HiveService.getBusinessBox().listenable(),
-      builder: (context, Box<BusinessAccount> businessBox, _) {
-        if (businessBox.isEmpty) {
+    return FutureBuilder<Business?>(
+      future: _businessFuture,
+      builder: (context, businessSnap) {
+        if (businessSnap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: _kBg,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final business = businessSnap.data;
+        if (business == null) {
           return const Scaffold(
             backgroundColor: _kBg,
             body: Center(child: Text('No merchant account found.')),
           );
         }
-        final business = businessBox.values.first;
 
         return Scaffold(
           backgroundColor: _kBg,
-          body: ValueListenableBuilder(
-            valueListenable: HiveService.getInstallmentBox().listenable(),
-            builder: (context, Box<Installment> installmentBox, _) {
-              final plans = installmentBox.values
-                  .where((i) => i.merchantId == business.id)
-                  .toList();
+          body: StreamBuilder<List<InstallmentRow>>(
+            stream: _plansStream,
+            builder: (context, snapshot) {
+              // Only advance the cache on a real data event; otherwise keep the
+              // last list. So a rebuild that arrives before the first emission
+              // (ConnectionState.waiting) — or any transient null — renders the
+              // previous data instead of flashing back to zero.
+              if (snapshot.hasData) {
+                _lastPlans = snapshot.data!;
+              }
+              final plans = _lastPlans;
 
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -119,7 +146,7 @@ class _MerchantDashboardDesktopState extends State<MerchantDashboardDesktop> {
     );
   }
 
-  Widget _buildMainContent(List<Installment> plans) {
+  Widget _buildMainContent(List<InstallmentRow> plans) {
     switch (_nav) {
       case _MerchantNav.overview:
         return _OverviewGrid(
@@ -157,7 +184,7 @@ class _MerchantDashboardDesktopState extends State<MerchantDashboardDesktop> {
 // Sidebar
 // ---------------------------------------------------------------------------
 class _Sidebar extends StatelessWidget {
-  final BusinessAccount business;
+  final Business business;
   final _MerchantNav nav;
   final ValueChanged<_MerchantNav> onSelectNav;
   final VoidCallback onLogout;
@@ -206,7 +233,7 @@ class _Sidebar extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          business.businessName,
+                          business.name,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14.5,
@@ -214,7 +241,7 @@ class _Sidebar extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          business.category,
+                          business.category ?? 'Merchant',
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 11.5,
@@ -529,9 +556,9 @@ class _PanelFrame extends StatelessWidget {
 // Overview — KPIs, revenue trend line chart, upcoming-installments table
 // ---------------------------------------------------------------------------
 class _OverviewGrid extends StatefulWidget {
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   final NumberFormat currency;
-  final ValueChanged<Installment> onSelectInstallment;
+  final ValueChanged<InstallmentRow> onSelectInstallment;
 
   const _OverviewGrid({
     required this.plans,
@@ -594,7 +621,7 @@ class _OverviewGridState extends State<_OverviewGrid> {
 
   /// Overdue plans first, then anything due within the next 3 days — the
   /// short list of things that actually need attention right now.
-  List<Installment> _urgentAlerts(List<Installment> upcoming) {
+  List<InstallmentRow> _urgentAlerts(List<InstallmentRow> upcoming) {
     final now = TimeService.now();
     final today = DateTime(now.year, now.month, now.day);
     final urgent = upcoming.where((i) {
@@ -872,9 +899,9 @@ class _RevenueLineChartCard extends StatelessWidget {
 }
 
 class _UpcomingInstallmentsTable extends StatefulWidget {
-  final List<Installment> installments;
+  final List<InstallmentRow> installments;
   final NumberFormat currency;
-  final ValueChanged<Installment> onSelect;
+  final ValueChanged<InstallmentRow> onSelect;
 
   const _UpcomingInstallmentsTable({
     required this.installments,
@@ -894,7 +921,7 @@ class _UpcomingInstallmentsTableState
   /// Flashes the tapped row with a brand tint before navigating, so the
   /// click reads as a deliberate, tactile action instead of an instant,
   /// "dead" jump straight to the detail pane.
-  void _handleTap(Installment inst, int index) {
+  void _handleTap(InstallmentRow inst, int index) {
     setState(() => _pressedIndex = index);
     Future.delayed(const Duration(milliseconds: 140), () {
       if (!mounted) return;
@@ -903,7 +930,7 @@ class _UpcomingInstallmentsTableState
     });
   }
 
-  DataRow _buildRow(Installment inst, int index) {
+  DataRow _buildRow(InstallmentRow inst, int index) {
     final isOverdue = inst.statusEnum == InstallmentStatus.overdue;
     final statusColor = isOverdue ? Colors.red : _kBrand;
     final statusLabel = isOverdue ? 'Overdue' : 'Pending';
@@ -1054,12 +1081,12 @@ class _UpcomingInstallmentsTableState
 /// real feed of overdue and soon-due plans — the things a merchant actually
 /// needs to act on today, rather than an empty gap.
 class _RecentAlertsCard extends StatelessWidget {
-  final List<Installment> alerts;
-  final ValueChanged<Installment> onSelect;
+  final List<InstallmentRow> alerts;
+  final ValueChanged<InstallmentRow> onSelect;
 
   const _RecentAlertsCard({required this.alerts, required this.onSelect});
 
-  String _urgencyText(Installment inst) {
+  String _urgencyText(InstallmentRow inst) {
     final now = TimeService.now();
     final today = DateTime(now.year, now.month, now.day);
     final due = DateTime(
@@ -1139,7 +1166,7 @@ class _RecentAlertsCard extends StatelessWidget {
 }
 
 class _AlertRow extends StatelessWidget {
-  final Installment installment;
+  final InstallmentRow installment;
   final String urgencyText;
   final bool isLast;
   final VoidCallback onTap;
@@ -1220,7 +1247,7 @@ class _AlertRow extends StatelessWidget {
 class _CustomerSummary {
   final String key;
   final String name;
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   _CustomerSummary({
     required this.key,
     required this.name,
@@ -1241,7 +1268,7 @@ class _CustomerSummary {
 }
 
 class _CustomersMasterDetail extends StatefulWidget {
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   final NumberFormat currency;
   final String? selectedKey;
   final ValueChanged<String?> onSelect;
@@ -1267,7 +1294,7 @@ class _CustomersMasterDetailState extends State<_CustomersMasterDetail> {
   }
 
   List<_CustomerSummary> _groupByCustomer() {
-    final Map<String, List<Installment>> grouped = {};
+    final Map<String, List<InstallmentRow>> grouped = {};
     for (final p in widget.plans) {
       final key = (p.customerPhone?.isNotEmpty == true)
           ? p.customerPhone!
@@ -1445,10 +1472,10 @@ class _CustomersMasterDetailState extends State<_CustomersMasterDetail> {
 // Active Installments — master-detail
 // ---------------------------------------------------------------------------
 class _ActiveMasterDetail extends StatefulWidget {
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   final NumberFormat currency;
-  final Installment? selected;
-  final ValueChanged<Installment> onSelect;
+  final InstallmentRow? selected;
+  final ValueChanged<InstallmentRow> onSelect;
   final VoidCallback onCancelled;
 
   const _ActiveMasterDetail({
@@ -1593,7 +1620,7 @@ class _ActiveMasterDetailState extends State<_ActiveMasterDetail> {
 }
 
 class _ActiveInboxRow extends StatelessWidget {
-  final Installment installment;
+  final InstallmentRow installment;
   final NumberFormat currency;
   final bool selected;
   final VoidCallback onTap;
@@ -1723,7 +1750,7 @@ class _TopItem {
 }
 
 class _ActivityEntry {
-  final Installment installment;
+  final InstallmentRow installment;
   final double amountPaid;
   final DateTime timestamp;
   _ActivityEntry({
@@ -1734,7 +1761,7 @@ class _ActivityEntry {
 }
 
 class _InsightsGrid extends StatefulWidget {
-  final List<Installment> plans;
+  final List<InstallmentRow> plans;
   final NumberFormat currency;
   const _InsightsGrid({required this.plans, required this.currency});
 
