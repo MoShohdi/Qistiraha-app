@@ -2357,7 +2357,7 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
     if (updated == null || updated.isCompleted) {
       showDesktopSnackBar(
         context,
-        message: 'Installment fully paid! Moved to History. 🎉',
+        message: 'Installment fully paid — moved to History.',
         backgroundColor: Colors.green,
       );
       Navigator.pop(context);
@@ -2852,7 +2852,7 @@ class _DebtBreakdownColumn extends StatelessWidget {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Plan Fully Paid 🎉',
+                        'Plan Fully Paid',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
