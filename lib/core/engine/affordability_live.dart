@@ -67,8 +67,9 @@ class LiveAffordabilityEngine {
     double total = 0.0;
     for (final r in rows) {
       if (!_isOpen(r)) continue;
-      final remainingMonths = r.totalMonths - r.paidMonths;
-      if (remainingMonths > 0) total += remainingMonths * r.monthlyDrain;
+      // Strict remaining principal (totalAmount - paidAmount), not
+      // remainingMonths × monthlyDrain, which rounds off (e.g. 9,999.96).
+      total += r.remaining;
     }
     return total;
   }

@@ -3,7 +3,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:qistiraha/core/services/database_service.dart';
 import 'package:qistiraha/core/services/time_service.dart';
+import 'package:qistiraha/core/theme/app_theme.dart';
 import 'package:qistiraha/core/utils/responsive_layout.dart';
+import 'package:qistiraha/widgets/desktop/kpi_card.dart';
 import 'package:qistiraha/features/auth/services/auth_service.dart';
 import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
 import 'package:qistiraha/features/auth/screens/login_screen_desktop.dart';
@@ -11,8 +13,7 @@ import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/features/merchant/widgets/installment_row_compat.dart';
 import 'merchant_customer_profile_screen.dart';
 import 'merchant_installment_details_desktop.dart';
-import 'merchant_portal_desktop.dart';
-import 'merchant_portal_screen.dart';
+import 'merchant_generate_link_modal.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 const _kBrandDark = Color(0xFF5A75AD);
@@ -260,21 +261,8 @@ class _Sidebar extends StatelessWidget {
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ResponsiveLayout(
-                            mobileWidget: MerchantPortalScreen(
-                              business: business,
-                            ),
-                            desktopWidget: MerchantPortalDesktopScreen(
-                              business: business,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: () =>
+                        showGeneratePaymentLinkModal(context, business),
                     icon: const Icon(Icons.qr_code, size: 17),
                     label: const Text(
                       'Generate Payment Link',
@@ -417,66 +405,6 @@ class _NavItemState extends State<_NavItem> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Shared: dense stat card, inbox-style row chrome
-// ---------------------------------------------------------------------------
-class _DesktopStatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _DesktopStatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(_kCardRadius),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: _kCardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 17),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 3),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Premium "web inbox" row chrome (Superhuman/Gmail-style): a colored left
 /// accent bar and faint tint when selected, a subtle hover tint at rest, and
 /// a hairline bottom divider — deliberately no shadow or rounded corners per
@@ -579,8 +507,11 @@ class _OverviewGridState extends State<_OverviewGrid> {
     super.dispose();
   }
 
-  double get _totalExpected =>
-      widget.plans.fold(0.0, (sum, i) => sum + i.amount);
+  // Outstanding balance still to collect across active plans — NOT the gross
+  // contract value. (totalAmount - paidAmount, summed over active rows.)
+  double get _totalExpected => widget.plans
+      .where((i) => i.isActive)
+      .fold(0.0, (sum, i) => sum + i.remaining);
 
   double get _totalReceived => widget.plans.fold(0.0, (sum, i) {
     if (i.pastPayments.isNotEmpty) {
@@ -602,12 +533,21 @@ class _OverviewGridState extends State<_OverviewGrid> {
       final paid = inst.paidPayments;
       if (paid <= 0) continue;
 
+      // Anchor payment dates on the ACTUAL last-paid timestamp, not the future
+      // dueDate (which pushed every payment out of the trailing-6-month window,
+      // flatlining the chart). pastPayments is chronological (oldest first), so
+      // index paid-1 is the most recent payment == lastPaidAt; step back one
+      // frequency period per earlier payment.
+      final anchor = inst.lastPaidAt ?? inst.dueDate;
       for (int i = 0; i < paid; i++) {
         final amount = i < inst.pastPayments.length
             ? inst.pastPayments[i]
             : inst.monthlyPayment;
-        final approxDate = inst.dueDate.subtract(
-          Duration(days: 30 * inst.monthsPerPayment * (paid - i)),
+        final stepsBack = (paid - 1 - i) * inst.monthsPerPayment;
+        final approxDate = DateTime(
+          anchor.year,
+          anchor.month - stepsBack,
+          anchor.day,
         );
         final monthsAgo =
             (now.year - approxDate.year) * 12 + (now.month - approxDate.month);
@@ -670,20 +610,24 @@ class _OverviewGridState extends State<_OverviewGrid> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
-                      child: _DesktopStatCard(
+                      child: KpiCard(
                         label: 'Total Expected Revenue',
                         value: widget.currency.format(_totalExpected),
                         icon: Icons.trending_up,
-                        color: _kBrand,
+                        accent: AppColors.accent,
+                        progress: (_totalReceived + _totalExpected) > 0
+                            ? _totalReceived / (_totalReceived + _totalExpected)
+                            : 0,
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: _DesktopStatCard(
+                      child: KpiCard(
                         label: 'Total Received',
                         value: widget.currency.format(_totalReceived),
                         icon: Icons.account_balance_wallet_outlined,
-                        color: Colors.green,
+                        accent: AppColors.success,
+                        sparkline: trend,
                       ),
                     ),
                   ],
@@ -1260,11 +1204,7 @@ class _CustomerSummary {
       plans.every((p) => p.statusEnum == InstallmentStatus.paid);
   double get outstanding => plans
       .where((p) => p.statusEnum != InstallmentStatus.paid)
-      .fold(
-        0.0,
-        (sum, p) =>
-            sum + ((p.totalPayments - p.paidPayments) * p.monthlyPayment),
-      );
+      .fold(0.0, (sum, p) => sum + p.remaining);
 }
 
 class _CustomersMasterDetail extends StatefulWidget {
@@ -1778,8 +1718,11 @@ class _InsightsGridState extends State<_InsightsGrid> {
     super.dispose();
   }
 
-  double get _totalExpected =>
-      widget.plans.fold(0.0, (sum, i) => sum + i.amount);
+  // Outstanding balance still to collect across active plans — NOT the gross
+  // contract value. (totalAmount - paidAmount, summed over active rows.)
+  double get _totalExpected => widget.plans
+      .where((i) => i.isActive)
+      .fold(0.0, (sum, i) => sum + i.remaining);
 
   double get _totalCollected => widget.plans.fold(0.0, (sum, i) {
     if (i.pastPayments.isNotEmpty) {
@@ -1820,12 +1763,21 @@ class _InsightsGridState extends State<_InsightsGrid> {
       final paid = inst.paidPayments;
       if (paid <= 0) continue;
 
+      // Anchor payment dates on the ACTUAL last-paid timestamp, not the future
+      // dueDate (which pushed every payment out of the trailing-6-month window,
+      // flatlining the chart). pastPayments is chronological (oldest first), so
+      // index paid-1 is the most recent payment == lastPaidAt; step back one
+      // frequency period per earlier payment.
+      final anchor = inst.lastPaidAt ?? inst.dueDate;
       for (int i = 0; i < paid; i++) {
         final amount = i < inst.pastPayments.length
             ? inst.pastPayments[i]
             : inst.monthlyPayment;
-        final approxDate = inst.dueDate.subtract(
-          Duration(days: 30 * inst.monthsPerPayment * (paid - i)),
+        final stepsBack = (paid - 1 - i) * inst.monthsPerPayment;
+        final approxDate = DateTime(
+          anchor.year,
+          anchor.month - stepsBack,
+          anchor.day,
         );
         final monthsAgo =
             (now.year - approxDate.year) * 12 + (now.month - approxDate.month);
@@ -1949,20 +1901,25 @@ class _InsightsGridState extends State<_InsightsGrid> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
-                      child: _DesktopStatCard(
+                      child: KpiCard(
                         label: 'Total Expected Revenue',
                         value: widget.currency.format(_totalExpected),
                         icon: Icons.account_balance_wallet_outlined,
-                        color: _kBrand,
+                        accent: AppColors.accent,
+                        progress: (_totalCollected + _totalExpected) > 0
+                            ? _totalCollected /
+                                  (_totalCollected + _totalExpected)
+                            : 0,
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: _DesktopStatCard(
+                      child: KpiCard(
                         label: 'Revenue Collected',
                         value: widget.currency.format(_totalCollected),
                         icon: Icons.savings_outlined,
-                        color: Colors.green,
+                        accent: AppColors.success,
+                        sparkline: trend,
                       ),
                     ),
                     const SizedBox(width: 12),

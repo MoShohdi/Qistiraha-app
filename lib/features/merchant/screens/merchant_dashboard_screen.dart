@@ -219,7 +219,10 @@ class _OverviewTab extends StatelessWidget {
   final NumberFormat currency;
   const _OverviewTab({required this.plans, required this.currency});
 
-  double get _totalExpected => plans.fold(0.0, (sum, i) => sum + i.amount);
+  // Outstanding still to collect across active plans (totalAmount - paidAmount),
+  // not the gross contract value.
+  double get _totalExpected =>
+      plans.where((i) => i.isActive).fold(0.0, (sum, i) => sum + i.remaining);
 
   double get _totalReceived => plans.fold(0.0, (sum, i) {
     if (i.pastPayments.isNotEmpty) {
@@ -464,11 +467,7 @@ class _CustomerSummary {
       plans.every((p) => p.statusEnum == InstallmentStatus.paid);
   double get outstanding => plans
       .where((p) => p.statusEnum != InstallmentStatus.paid)
-      .fold(
-        0.0,
-        (sum, p) =>
-            sum + ((p.totalPayments - p.paidPayments) * p.monthlyPayment),
-      );
+      .fold(0.0, (sum, p) => sum + p.remaining);
 }
 
 class _CustomersTab extends StatelessWidget {

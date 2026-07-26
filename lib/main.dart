@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/services/hive_service.dart';
 import 'core/services/deep_link_service.dart';
+import 'core/theme/app_theme.dart';
 import 'core/utils/responsive_layout.dart';
 import 'features/consumer/screens/home_screen.dart';
 import 'features/consumer/screens/insights_screen.dart';
@@ -164,24 +165,8 @@ class _QistirahaAppState extends State<QistirahaApp> {
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Qistiraha',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF99AFD7),
-          primary: const Color(0xFF99AFD7),
-        ),
-        useMaterial3: true,
-        tabBarTheme: const TabBarThemeData(
-          indicatorColor: Color(0xFF99AFD7),
-          labelColor: Color(0xFF99AFD7),
-          unselectedLabelColor: Colors.grey,
-        ),
-        progressIndicatorTheme: const ProgressIndicatorThemeData(
-          color: Color(0xFF99AFD7),
-        ),
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          selectedItemColor: Color(0xFF99AFD7),
-        ),
-      ),
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
       home: destinationScreen(widget.initialDestination),
     );
   }

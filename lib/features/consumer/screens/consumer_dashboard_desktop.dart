@@ -10,7 +10,6 @@ import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
 import 'package:qistiraha/features/auth/screens/login_screen_desktop.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
 import 'package:qistiraha/widgets/stream_error_view.dart';
-import 'add_installment_screen.dart';
 import 'add_installment_desktop.dart';
 
 const _kBrand = Color(0xFF99AFD7);
@@ -280,17 +279,7 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
                 userName: _name.isEmpty ? 'You' : _name,
                 nav: _nav,
                 onSelectNav: (n) => setState(() => _nav = n),
-                onAddInstallment: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ResponsiveLayout(
-                        mobileWidget: AddInstallmentScreen(),
-                        desktopWidget: AddInstallmentDesktopScreen(),
-                      ),
-                    ),
-                  );
-                },
+                onAddInstallment: () => showAddInstallmentModal(context),
                 onLogout: () => _logout(context),
               ),
               Expanded(
@@ -2357,7 +2346,7 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
     if (updated == null || updated.isCompleted) {
       showDesktopSnackBar(
         context,
-        message: 'Installment fully paid! Moved to History. 🎉',
+        message: 'Installment fully paid — moved to History.',
         backgroundColor: Colors.green,
       );
       Navigator.pop(context);
@@ -2366,15 +2355,62 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
     }
   }
 
+  /// Deletes a self-added plan. Only reachable when [canDelete] is true
+  /// (merchant_id == consumer_id); RLS also enforces it server-side. The
+  /// dashboard grid is stream-backed, so it drops the row reactively once the
+  /// dialog closes.
+  Future<void> _delete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Installment?'),
+        content: const Text(
+          'This permanently removes this self-added plan from your dashboard. '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await DatabaseService.deleteInstallment(_inst.id);
+    } catch (_) {
+      if (mounted) {
+        showDesktopSnackBar(
+          context,
+          message: 'Could not delete this installment.',
+        );
+      }
+      return;
+    }
+    if (mounted) {
+      Navigator.pop(context);
+      showDesktopSnackBar(context, message: 'Installment deleted.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final meta = _statusMeta(_inst);
-    final remainingMonths = _inst.totalMonths - _inst.paidMonths;
-    final double remainingDebt = remainingMonths * _inst.monthlyPayment;
+    // Strict subtraction — never monthlyPayment × remainingMonths, which
+    // rounds (833.33 × 12 = 9,999.96 instead of 10,000).
+    final double remainingDebt = _inst.remaining;
     final timeline = _buildTimeline();
-    // In the marketplace model the merchant owns the contract (RLS lets only
-    // them delete it), so the consumer's detail view is never deletable here.
-    const canDelete = false;
+    // A consumer may delete ONLY a self-added plan (merchant_id == consumer_id,
+    // i.e. they are their own "merchant"). A merchant-issued contract is the
+    // merchant's to cancel — RLS enforces this, and we surface it read-only.
+    final bool canDelete = _inst.merchantId == _inst.consumerId;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
@@ -2475,7 +2511,7 @@ class _ConsumerDetailDialogState extends State<_ConsumerDetailDialog> {
                       remainingDebt: remainingDebt,
                       canDelete: canDelete,
                       onPay: _pay,
-                      onDelete: () {},
+                      onDelete: _delete,
                       uploadingReceipt: _uploadingReceipt,
                       onPickReceipt: _pickReceipt,
                       onRemoveReceipt: _removeReceipt,
@@ -2852,7 +2888,7 @@ class _DebtBreakdownColumn extends StatelessWidget {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Plan Fully Paid 🎉',
+                        'Plan Fully Paid',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
