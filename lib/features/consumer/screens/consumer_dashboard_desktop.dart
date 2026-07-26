@@ -10,7 +10,6 @@ import 'package:qistiraha/features/auth/screens/welcome_screen.dart';
 import 'package:qistiraha/features/auth/screens/login_screen_desktop.dart';
 import 'package:qistiraha/widgets/branded_bar_chart_card.dart';
 import 'package:qistiraha/widgets/stream_error_view.dart';
-import 'add_installment_screen.dart';
 import 'add_installment_desktop.dart';
 
 const _kBrand = Color(0xFF99AFD7);
@@ -280,17 +279,7 @@ class _ConsumerDashboardDesktopState extends State<ConsumerDashboardDesktop> {
                 userName: _name.isEmpty ? 'You' : _name,
                 nav: _nav,
                 onSelectNav: (n) => setState(() => _nav = n),
-                onAddInstallment: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ResponsiveLayout(
-                        mobileWidget: AddInstallmentScreen(),
-                        desktopWidget: AddInstallmentDesktopScreen(),
-                      ),
-                    ),
-                  );
-                },
+                onAddInstallment: () => showAddInstallmentModal(context),
                 onLogout: () => _logout(context),
               ),
               Expanded(

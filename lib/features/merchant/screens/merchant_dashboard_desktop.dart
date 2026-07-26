@@ -13,8 +13,7 @@ import 'package:qistiraha/features/consumer/models/enums.dart';
 import 'package:qistiraha/features/merchant/widgets/installment_row_compat.dart';
 import 'merchant_customer_profile_screen.dart';
 import 'merchant_installment_details_desktop.dart';
-import 'merchant_portal_desktop.dart';
-import 'merchant_portal_screen.dart';
+import 'merchant_generate_link_modal.dart';
 
 const _kBrand = Color(0xFF99AFD7);
 const _kBrandDark = Color(0xFF5A75AD);
@@ -262,21 +261,8 @@ class _Sidebar extends StatelessWidget {
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ResponsiveLayout(
-                            mobileWidget: MerchantPortalScreen(
-                              business: business,
-                            ),
-                            desktopWidget: MerchantPortalDesktopScreen(
-                              business: business,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: () =>
+                        showGeneratePaymentLinkModal(context, business),
                     icon: const Icon(Icons.qr_code, size: 17),
                     label: const Text(
                       'Generate Payment Link',
